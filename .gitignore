@@ -37,6 +37,12 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
+# WordPress
+wp-content/
+
+# Composer
+vendor/
+
 # Local dev files
 .env
 *_bak
