@@ -1,0 +1,14 @@
+version: 2
+updates:
+
+  # WordPress Dockerfile
+  - package-ecosystem: "docker"
+    directory: "/wordpress/"
+    schedule:
+      interval: "weekly"
+      
+  # NGINX Dockerfile
+  - package-ecosystem: "docker"
+    directory: "/nginx/"
+    schedule:
+      interval: "weekly"
