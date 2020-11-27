@@ -1,0 +1,14 @@
+{
+  "name": "gioamato/stateless-wordpress",
+  "description": "Stateless WordPress (K8s Ready)",
+  "repositories": [
+    {
+      "type":"composer",
+      "url":"https://wpackagist.org",
+      "only": ["wpackagist-plugin/*", "wpackagist-theme/*"]
+    }
+  ],
+  "require": {
+    "wpackagist-plugin/wp-stateless":"3.1.0"
+  }
+}
