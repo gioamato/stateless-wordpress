@@ -40,7 +40,7 @@ done
 # otherwise use 'localhost'
 : "${UPSTREAM_SERVER:=localhost}"
 echo >&2 "Setting '$UPSTREAM_SERVER' as upstream server"
-sed -i -e "s/UPSTREAM_SERVER/$UPSTREAM_SERVER/g" /etc/nginx/conf.d/default.conf
+sed -i -e "s/#{UPSTREAM_SERVER}/$UPSTREAM_SERVER/g" /etc/nginx/nginx.conf
 
 # wait upstream server availability then start NGINX service
 wait-for-it $UPSTREAM_SERVER:9000 --timeout=300 --strict
