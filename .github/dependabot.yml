@@ -4,3 +4,7 @@ updates:
     directory: "/nginx/"
     schedule:
       interval: "daily"
+  - package-ecosystem: "docker"
+    directory: "/wordpress/"
+    schedule:
+      interval: "daily"
