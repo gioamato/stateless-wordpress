@@ -26,9 +26,10 @@ services:
     depends_on:
       - db
     environment:
-      WORDPRESS_DB_HOST: db
-      WORDPRESS_DB_USER: wordpress
-      WORDPRESS_DB_PASSWORD: wordpress
+      WP_DB_HOST: db
+      WP_DB_NAME: wordpress
+      WP_DB_USER: wordpress
+      WP_DB_PASSWORD: wordpress
 
   nginx:
     container_name: nginx
