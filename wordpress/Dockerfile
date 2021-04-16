@@ -3,7 +3,7 @@ WORKDIR /usr/src/app
 COPY composer.* ./
 RUN composer install --no-dev
 
-FROM wordpress:5.7.0-fpm-alpine
+FROM wordpress:5.7.1-fpm-alpine
 
 # PHP defaults
 ENV PHP_MEMORY_LIMIT="128M"
