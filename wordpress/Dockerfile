@@ -3,9 +3,9 @@ WORKDIR /usr/src/app
 COPY composer.* ./
 RUN composer install --no-dev
 COPY themes ./themes
-RUN unzip ./themes/\*.zip -d ./wp-content/themes
+RUN for file in `ls ./themes/*.zip`; do unzip "${file}" -d "./wp-content/themes"; done
 COPY plugins ./plugins
-RUN unzip ./plugins/\*.zip -d ./wp-content/plugins
+RUN for file in `ls ./plugins/*.zip`; do unzip "${file}" -d "./wp-content/plugins"; done
 
 FROM wordpress:5.8.0-fpm-alpine
 
