@@ -1,0 +1,9 @@
+*
+!plugins
+!themes
+!composer.json
+!composer.lock
+!opcache.ini
+!php.ini
+!wp-config.php
+!www.conf

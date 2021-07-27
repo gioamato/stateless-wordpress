@@ -2,6 +2,10 @@ FROM composer:2.1.5 as build
 WORKDIR /usr/src/app
 COPY composer.* ./
 RUN composer install --no-dev
+COPY themes ./themes
+RUN unzip ./themes/\*.zip -d ./wp-content/themes
+COPY plugins ./plugins
+RUN unzip ./plugins/\*.zip -d ./wp-content/plugins
 
 FROM wordpress:5.8.0-fpm-alpine
 
