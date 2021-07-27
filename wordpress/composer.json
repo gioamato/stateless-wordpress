@@ -12,11 +12,15 @@
       "url": "https://wp-languages.github.io"
     }
   ],
+  "config": {
+    "sort-packages": true
+  },
   "require": {
-    "wpackagist-plugin/wp-stateless":"3.1.0",
-    "koodimonni-language/it_it":"*",
-    "koodimonni-language/es_es":"*",
-    "koodimonni-language/fr_fr":"*"
+    "koodimonni-language/es_es": "*",
+    "koodimonni-language/fr_fr": "*",
+    "koodimonni-language/it_it": "*",
+    "wpackagist-plugin/windows-azure-storage": "4.3.2",
+    "wpackagist-plugin/wp-stateless": "3.1.0"
   },
   "extra": {
     "dropin-paths": {

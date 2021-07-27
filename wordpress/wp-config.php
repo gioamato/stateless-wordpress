@@ -27,9 +27,16 @@ define( 'DISALLOW_FILE_MODS', true );
 define( 'AUTOMATIC_UPDATER_DISABLED', true );
 define( 'WP_AUTO_UPDATE_CORE', false );
 
+// Azure Storage
+// define( 'MICROSOFT_AZURE_ACCOUNT_NAME',           $_ENV['MICROSOFT_AZURE_ACCOUNT_NAME']);
+// define( 'MICROSOFT_AZURE_ACCOUNT_KEY',            $_ENV['MICROSOFT_AZURE_ACCOUNT_KEY']);
+// define( 'MICROSOFT_AZURE_CONTAINER',              $_ENV['MICROSOFT_AZURE_CONTAINER']);
+// define( 'MICROSOFT_AZURE_CNAME',                  $_ENV['MICROSOFT_AZURE_CNAME']);
+// define( 'MICROSOFT_AZURE_USE_FOR_DEFAULT_UPLOAD', $_ENV['MICROSOFT_AZURE_USE_FOR_DEFAULT_UPLOAD']);
+
 // Reverse Proxy
 if ( strpos( $_SERVER['HTTP_X_FORWARDED_PROTO'], 'https' ) !== false ) {
-	$_SERVER['HTTPS']='on';
+	$_SERVER['HTTPS'] = 'on';
 }
 
 if ( isset( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {

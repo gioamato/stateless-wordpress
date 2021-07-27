@@ -38,10 +38,10 @@ Temporary Items
 .apdisk
 
 # WordPress
-wp-content/
+wp-content
 
 # Composer
-vendor/
+vendor
 
 # Local dev files
 .env
