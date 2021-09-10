@@ -1,0 +1,29 @@
+name: Build WordPress and Push to Docker Hub
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'wordpress/**'
+  workflow_dispatch:
+
+env:
+  HUB_USER: gioamato
+  REPO_NAME: stateless-wordpress
+  IMAGE_TAG: wordpress-alpine
+  
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    
+    # Docker Hub Login
+    - uses: docker/login-action@v1
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    
+    # Build image and push to Docker Hub
+    - run: |
+        docker build . -t ${{ env.HUB_USER }}/${{ env.REPO_NAME }}:${{ env.IMAGE_TAG }}
+        docker push ${{ env.HUB_USER }}/${{ env.REPO_NAME }}:${{ env.IMAGE_TAG }}
