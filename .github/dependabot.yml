@@ -8,3 +8,7 @@ updates:
     directory: "/wordpress/"
     schedule:
       interval: "daily"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
