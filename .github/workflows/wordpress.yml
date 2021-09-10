@@ -1,4 +1,4 @@
-name: Build WordPress and Push to Docker Hub
+name: WordPress
 on:
   push:
     branches: [ master ]
@@ -25,5 +25,5 @@ jobs:
     
     # Build image and push to Docker Hub
     - run: |
-        docker build . -t ${{ env.HUB_USER }}/${{ env.REPO_NAME }}:${{ env.IMAGE_TAG }}
+        docker build ./wordpress -t ${{ env.HUB_USER }}/${{ env.REPO_NAME }}:${{ env.IMAGE_TAG }}
         docker push ${{ env.HUB_USER }}/${{ env.REPO_NAME }}:${{ env.IMAGE_TAG }}
