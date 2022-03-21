@@ -43,6 +43,10 @@ ENV PHP_FPM_MAX_REQUESTS="1000"
 # Copy the PHP-FPM configuration file
 COPY ./www.conf /usr/local/etc/php-fpm.d/www.conf
 
+# Default Themes/Plugins Cleanup
+RUN rm -r /usr/src/wordpress/wp-content/themes/*
+RUN rm -r /usr/src/wordpress/wp-content/plugins/*
+
 # Copy WordPress files
 COPY wp-config.php /usr/src/wordpress/wp-config.php
 COPY --from=build /usr/src/app/wp-content /usr/src/wordpress/wp-content
