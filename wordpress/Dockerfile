@@ -2,6 +2,7 @@ FROM composer:2.2.9 as build
 WORKDIR /usr/src/app
 COPY composer.* ./
 RUN composer install --no-dev
+COPY mu-plugins ./wp-content/mu-plugins
 COPY themes ./themes
 RUN for file in `ls ./themes/*.zip`; do unzip "${file}" -d "./wp-content/themes"; done
 COPY plugins ./plugins
