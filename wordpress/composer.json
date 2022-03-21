@@ -13,7 +13,12 @@
     }
   ],
   "config": {
-    "sort-packages": true
+    "sort-packages": true,
+    "allow-plugins": {
+      "composer/installers": true,
+      "koodimonni/composer-dropin-installer": true,
+      "inpsyde/wp-translation-downloader": true
+    }
   },
   "require": {
     "inpsyde/wp-translation-downloader": "^2.0",
