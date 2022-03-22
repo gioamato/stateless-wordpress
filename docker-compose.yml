@@ -6,8 +6,8 @@ volumes:
 
 services:
   db:
-    container_name: db
-    image: percona:5.7
+    container_name: stateless-wordpress_db
+    image: mysql:5.7
     restart: always
     volumes:
       - db-data:/var/lib/mysql
@@ -18,7 +18,7 @@ services:
       MYSQL_PASSWORD: wordpress
 
   wordpress:
-    container_name: wordpress
+    container_name: stateless-wordpress_wordpress
     build: ./wordpress
     restart: always
     volumes:
@@ -32,7 +32,7 @@ services:
       WP_DB_PASSWORD: wordpress
 
   nginx:
-    container_name: nginx
+    container_name: stateless-wordpress_nginx
     build: ./nginx
     restart: always
     volumes:
@@ -40,6 +40,6 @@ services:
     depends_on: 
       - wordpress
     ports: 
-      - "8000:80"
+      - "8080:80"
     environment:
       UPSTREAM_SERVER: wordpress
