@@ -1,0 +1,183 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: stateless-wordpress
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: stateless-wordpress
+  name: mysql
+spec:
+  ports:
+  - port: 3306
+  selector:
+    app: mysql
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: stateless-wordpress
+  name: mysql
+spec:
+  selector:
+    matchLabels:
+      app: mysql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - image: mysql:5.7
+        name: mysql
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: rootpassword
+        - name: MYSQL_DATABASE
+          value: wordpress
+        - name: MYSQL_USER
+          value: wordpress
+        - name: MYSQL_PASSWORD
+          value: wordpress
+        ports:
+        - containerPort: 3306
+          name: mysql
+        volumeMounts:
+        - name: db-data
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: db-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: stateless-wordpress
+  name: stateless-wordpress
+spec:
+  selector:
+    app: stateless-wordpress
+  ports:
+    - port: 80
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: stateless-wordpress
+  name: stateless-wordpress-env
+type: Opaque
+data:
+  # PHP configuration
+  PHP_MEMORY_LIMIT: MjU2TQ==
+  PHP_UPLOAD_MAX_FILESIZE: MTAwTQ==
+  PHP_POST_MAX_SIZE: MTAwTQ==
+  PHP_MAX_EXECUTION_TIME: OTA=
+  PHP_MAX_INPUT_TIME: LTE=
+  PHP_MAX_INPUT_VARS: MTAwMA==
+
+  # OPcache configuration
+  PHP_OPCACHE_ENABLE: MQ==
+  PHP_OPCACHE_MEMORY_CONSUMPTION: MTI4
+  PHP_OPCACHE_MAX_ACCELERATED_FILES: MTAwMDA=
+  PHP_OPCACHE_REVALIDATE_FREQUENCY: MA==
+  PHP_OPCACHE_VALIDATE_TIMESTAMPS: MA==
+
+  # PHP-FPM configuration
+  PHP_FPM_PM: ZHluYW1pYw==
+  PHP_FPM_MAX_CHILDREN: NQ==
+  PHP_FPM_START_SERVERS: Mg==
+  PHP_FPM_MIN_SPARE_SERVERS: MQ==
+  PHP_FPM_MAX_SPARE_SERVERS: Mg==
+  PHP_FPM_MAX_REQUESTS: MTAwMA==
+
+  # WordPress configuration
+  WP_DB_NAME: d29yZHByZXNz
+  WP_DB_USER: d29yZHByZXNz
+  WP_DB_PASSWORD: d29yZHByZXNz
+  WP_DB_HOST: bXlzcWw=
+  WP_DB_CHARSET: dXRmOA==
+  WP_DB_COLLATE: dXRmOF9nZW5lcmFsX2Np
+  WP_AUTH_KEY: WHNVQCArNCtoOjsvNl9VTit2cil8VEtSO2BtIEFTaCxOe2QpOT1NUDtWMiYgRTpifD5rdnBIX2ssQl0pRmEkLw==
+  WP_SECURE_AUTH_KEY: KkByaVt0K3FNIF9xYy1COH4hN3pbSCNPTUFlJEJufjAuQ2sjNkN8K3hNV2xZcW0oUGQvVUUjfitWKXlUWWR6WA==
+  WP_LOGGED_IN_KEY: ZjhZJGw1JVZCLks1a2YjYDVUcChTTCUjTlNPdStaSSM2Oi1pRmhsJStDUT5ePjc3K25xVUdVS1oheC5fTmgxfQ==
+  WP_NONCE_KEY: OVlTW25sLT5JUjYrSV51MExNQy81RF1ofHZVOlgtIDIwWTRFIGo1elQ1dWA+cytmUnVlTjl8Jlt8VCx4K01pKw==
+  WP_AUTH_SALT: Sk0qXmZRSkdZTHxFJllyUkNSVVJaSzNecS0kKD95UC8vOEUyeSp5IVFhVy1ITEU9IUpNPkRIcHg9WmQsa0pqOw==
+  WP_SECURE_AUTH_SALT: QyslXWNATGM3QXwoSnk3Z2FVKip1YF9JQ1gtaj9YO3pddjg1S148WCNePTxJSCArfS0rT1QkNzp7VSExa3gwVw==
+  WP_LOGGED_IN_SALT: a1hOdVlDZ0dVKHdDa19oUWxXREhzfT5SJUd+bERDTmchJSNKelJER2xoS2pkTyMoXU4lNl8mbD1+TD9MfDxpVw==
+  WP_NONCE_SALT: KFotMj94LiZBdXt9USN9Titiai0hUjYrN3VvcGRxJGItPGVnOiY+K3svJnErTC85b3lEd2I/XWIhfXAvXSxxYg==
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: stateless-wordpress
+  name: stateless-wordpress
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: stateless-wordpress
+  template:
+    metadata:
+      labels:
+        app: stateless-wordpress
+    spec:
+      containers:
+      - name: wordpress
+        image: gioamato/stateless-wordpress:wordpress-alpine
+        imagePullPolicy: Always
+        envFrom:
+        - secretRef:
+            name: stateless-wordpress-env
+        ports:
+        - containerPort: 9000
+        readinessProbe:
+          failureThreshold: 3
+          tcpSocket:
+            port: 9000
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+        livenessProbe:
+          failureThreshold: 3
+          tcpSocket:
+            port: 9000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+        volumeMounts:
+        - name: data
+          mountPath: /var/www/html
+      - name: nginx
+        image: gioamato/stateless-wordpress:nginx-alpine
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 80
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+        volumeMounts:
+        - name: data
+          mountPath: /var/www/html
+      volumes:
+      - name: data
+        emptyDir: {}
