@@ -48,6 +48,6 @@ RUN rm -r /usr/src/wordpress/wp-content/themes/*
 RUN rm -r /usr/src/wordpress/wp-content/plugins/*
 
 # Copy WordPress files
-COPY wp-config.php /usr/src/wordpress/wp-config.php
-COPY --from=build /usr/src/app/wp-content /usr/src/wordpress/wp-content
-RUN chown -R www-data:www-data /usr/src/wordpress
+# TODO: Use wp-config-docker.php from the WordPress official Docker image
+COPY --chown=www-data:www-data wp-config.php /usr/src/wordpress/wp-config.php
+COPY --chown=www-data:www-data --from=build /usr/src/app/wp-content /usr/src/wordpress/wp-content

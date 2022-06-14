@@ -46,3 +46,4 @@ vendor
 # Local dev files
 .env
 *_bak
+.dccache
