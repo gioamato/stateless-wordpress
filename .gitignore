@@ -42,6 +42,7 @@ wp-content
 
 # Composer
 vendor
+wp-translation-downloader.lock
 
 # Local dev files
 .env
