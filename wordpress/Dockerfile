@@ -8,7 +8,7 @@ RUN for file in `ls ./themes/*.zip`; do unzip "${file}" -d "./wp-content/themes"
 COPY plugins ./plugins
 RUN for file in `ls ./plugins/*.zip`; do unzip "${file}" -d "./wp-content/plugins"; done
 
-FROM wordpress:6.1.0-fpm-alpine
+FROM wordpress:6.1.1-fpm-alpine
 
 # PHP defaults
 ENV PHP_MEMORY_LIMIT="128M"
