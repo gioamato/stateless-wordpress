@@ -42,5 +42,13 @@ kubectl apply -f https://raw.githubusercontent.com/gioamato/stateless-wordpress/
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
+## Credits
+- [WordPress.org](https://wordpress.org/about/) - This project is built around the great work at WordPress.
+- [the Docker Community⁠](https://github.com/docker-library/wordpress) - The official WordPress Docker image is used as base image here.
+- [Composer](https://getcomposer.org/) - Used to manage PHP dependencies and packages.
+- [WordPress Packagist](https://wpackagist.org/) - Allows WordPress plugins and themes to be managed using Composer.
+- [nginx](https://nginx.org/) - Used as reverse proxy with FastCGI + Caching.
+- [vishnubob/wait-for-it](https://github.com/vishnubob/wait-for-it) - Used in the nginx image to wait for the upstream server availability (WordPress).
+
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
