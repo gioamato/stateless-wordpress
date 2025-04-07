@@ -1,4 +1,4 @@
-FROM composer:2.8.6 as build
+FROM composer:2.8.7 as build
 WORKDIR /usr/src/app
 COPY composer.* ./
 RUN composer install --no-dev
