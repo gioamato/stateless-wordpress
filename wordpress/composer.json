@@ -17,7 +17,7 @@
   },
   "require": {
     "inpsyde/wp-translation-downloader": "^2.0",
-    "wpackagist-plugin/nginx-cache": "1.0.5",
+    "wpackagist-plugin/nginx-cache": "1.0.8",
     "wpackagist-plugin/windows-azure-storage": "4.3.2",
     "wpackagist-plugin/wp-stateless": "3.1.0",
     "wpackagist-theme/twentytwentytwo": "1.1"

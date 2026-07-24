@@ -26,6 +26,7 @@ define( 'WP_DEBUG', false );
 define( 'DISALLOW_FILE_MODS', true );
 define( 'AUTOMATIC_UPDATER_DISABLED', true );
 define( 'WP_AUTO_UPDATE_CORE', false );
+define( 'NGINX_CACHE_PATH', '/var/www/html/cache');
 
 // Reverse Proxy
 if ( strpos( $_SERVER['HTTP_X_FORWARDED_PROTO'], 'https' ) !== false ) {
