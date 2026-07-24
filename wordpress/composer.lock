@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f0832e58cd68aca590a67b7be4c9abcc",
+    "content-hash": "600bf5c8a85d655ae211ec868a702ddb",
     "packages": [
         {
             "name": "composer/installers",
@@ -209,15 +209,15 @@
         },
         {
             "name": "wpackagist-plugin/nginx-cache",
-            "version": "1.0.5",
+            "version": "1.0.8",
             "source": {
                 "type": "svn",
                 "url": "https://plugins.svn.wordpress.org/nginx-cache/",
-                "reference": "tags/1.0.5"
+                "reference": "tags/1.0.8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://downloads.wordpress.org/plugin/nginx-cache.1.0.5.zip"
+                "url": "https://downloads.wordpress.org/plugin/nginx-cache.1.0.8.zip"
             },
             "require": {
                 "composer/installers": "^1.0 || ^2.0"
@@ -283,10 +283,10 @@
     "packages-dev": [],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
-    "platform": [],
-    "platform-dev": [],
-    "plugin-api-version": "2.3.0"
+    "platform": {},
+    "platform-dev": {},
+    "plugin-api-version": "2.9.0"
 }
