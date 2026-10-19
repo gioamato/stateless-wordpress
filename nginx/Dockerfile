@@ -1,4 +1,4 @@
-FROM nginx:1.31.6-alpine
+FROM nginx:1.31.7-alpine
 
 # Install bash to use 'wait-for-it' and entrypoint
 RUN apk update && apk add bash && apk add --no-cache coreutils
