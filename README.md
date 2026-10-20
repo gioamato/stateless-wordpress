@@ -7,6 +7,10 @@
 
 Minimal, cloud-native, battle-tested WordPress environment meant to be used both in local development and staging/production.
 
+## Supported Architectures
+
+Images are published as multi-arch manifests for `linux/amd64` and `linux/arm64` (e.g. Apple Silicon, AWS Graviton, Raspberry Pi 4/5 with a 64-bit OS). Docker pulls the right variant automatically.
+
 ## Usage
 
 ### Local Development Environment
