@@ -41,8 +41,9 @@ ENV PHP_FPM_MIN_SPARE_SERVERS="1"
 ENV PHP_FPM_MAX_SPARE_SERVERS="2"
 ENV PHP_FPM_MAX_REQUESTS="1000"
 
-# Copy the PHP-FPM configuration file
-COPY ./www.conf /usr/local/etc/php-fpm.d/www.conf
+# Copy the PHP-FPM configuration file, named to load after all of the image's pool files
+# (read in alphabetical order, last value wins), so these settings always apply
+COPY ./php-fpm.conf /usr/local/etc/php-fpm.d/zzz-custom.conf
 
 # Default Themes/Plugins Cleanup
 RUN rm -r /usr/src/wordpress/wp-content/themes/*

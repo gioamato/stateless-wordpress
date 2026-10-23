@@ -5,6 +5,6 @@
 !composer.json
 !composer.lock
 !opcache.ini
+!php-fpm.conf
 !php.ini
 !wp-config.php
-!www.conf
