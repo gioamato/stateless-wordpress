@@ -1,0 +1,47 @@
+# Overrides docker-compose.yml for tests/smoke.sh:
+# - drops the fixed container names and binds a separate port, so it can run next to a dev stack
+# - waits for MySQL to be healthy before starting WordPress
+# - sets non-default PHP/FPM values, so the test can prove env vars reach php.ini and the FPM pool
+# - adds a wp-cli service to inspect the installed site
+services:
+  db:
+    container_name: !reset null
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 2s
+      timeout: 5s
+      retries: 90
+
+  wordpress:
+    container_name: !reset null
+    image: ${WORDPRESS_IMAGE:-stateless-wordpress:wordpress-test}
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PHP_MEMORY_LIMIT: 192M
+      PHP_FPM_MAX_CHILDREN: "7"
+
+  nginx:
+    container_name: !reset null
+    image: ${NGINX_IMAGE:-stateless-wordpress:nginx-test}
+    restart: "no"
+    ports: !override
+      - "127.0.0.1:${SMOKE_PORT:-8089}:80"
+
+  cli:
+    image: wordpress:cli-2.12.0
+    profiles: [cli]
+    # www-data on the Alpine-based images, so wp-cli can read the shared volume
+    user: "82:82"
+    volumes:
+      - wp-data:/var/www/html
+    depends_on:
+      - db
+    environment:
+      WP_DB_HOST: db
+      WP_DB_NAME: wordpress
+      WP_DB_USER: wordpress
+      WP_DB_PASSWORD: wordpress
