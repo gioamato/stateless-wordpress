@@ -20,7 +20,7 @@ done
 # wait-for-it.sh is vendored from vishnubob/wait-for-it, so it is not linted here
 run "shellcheck" \
 	docker run --rm -v "$PWD:/mnt:ro" -w /mnt koalaman/shellcheck:v0.11.0 \
-	nginx/docker-entrypoint.sh tests/smoke.sh tests/lint.sh
+	nginx/docker-entrypoint.sh tests/smoke.sh tests/lint.sh .github/scripts/image-tag-exists.sh
 
 run "actionlint" \
 	docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.7 -no-color
