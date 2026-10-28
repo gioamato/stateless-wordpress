@@ -18,41 +18,9 @@ jobs:
     - uses: actions/checkout@v7
     - run: tests/lint.sh
 
-  # Build both images natively on each architecture and test them together
+  # Same build and smoke test that release.yml runs before pushing
   smoke:
-    name: smoke (${{ matrix.arch }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-        - arch: amd64
-          runner: ubuntu-latest
-        - arch: arm64
-          runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
-    steps:
-    - uses: actions/checkout@v7
-    - uses: docker/setup-buildx-action@v4.4.1
-
-    - uses: docker/build-push-action@v7.4.0
-      with:
-        context: ./wordpress
-        load: true
-        tags: stateless-wordpress:wordpress-test
-        cache-from: type=gha,scope=wordpress-${{ matrix.arch }}
-        cache-to: type=gha,mode=max,scope=wordpress-${{ matrix.arch }}
-
-    - uses: docker/build-push-action@v7.4.0
-      with:
-        context: ./nginx
-        load: true
-        tags: stateless-wordpress:nginx-test
-        cache-from: type=gha,scope=nginx-${{ matrix.arch }}
-        cache-to: type=gha,mode=max,scope=nginx-${{ matrix.arch }}
-
-    - run: tests/smoke.sh
-      env:
-        SMOKE_NO_BUILD: "1"
+    uses: ./.github/workflows/build-test.yml
 
   # Single required check for branch protection, so the jobs above can change without touching it
   ci-ok:
