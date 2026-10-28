@@ -43,6 +43,22 @@ kubectl apply -f https://raw.githubusercontent.com/gioamato/stateless-wordpress/
 # You will find the famous WordPress 5-minute install
 ```
 
+## Testing
+
+Every pull request runs the same checks you can run locally (only Docker is required):
+
+```bash
+# Lint Dockerfiles, shell scripts and workflows, and check composer.lock is in sync
+tests/lint.sh
+
+# Build both images, start the stack and test it end to end:
+# env-based PHP/FPM config, WordPress install, bundled plugins/theme/translations,
+# FastCGI cache, NGINX access rules and clean PHP/NGINX logs
+tests/smoke.sh
+```
+
+The smoke test uses its own Compose project and port (`SMOKE_PORT`, default `8089`), so it can run next to the local development stack.
+
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
