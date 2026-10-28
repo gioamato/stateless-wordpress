@@ -1,7 +1,6 @@
 # Stateless WordPress
 
-[![WordPress](https://github.com/gioamato/stateless-wordpress/actions/workflows/wordpress.yml/badge.svg)](https://github.com/gioamato/stateless-wordpress/actions/workflows/wordpress.yml)
-[![NGINX](https://github.com/gioamato/stateless-wordpress/actions/workflows/nginx.yml/badge.svg)](https://github.com/gioamato/stateless-wordpress/actions/workflows/nginx.yml)
+[![Release](https://github.com/gioamato/stateless-wordpress/actions/workflows/release.yml/badge.svg)](https://github.com/gioamato/stateless-wordpress/actions/workflows/release.yml)
 [![GitHub](https://img.shields.io/github/license/gioamato/stateless-wordpress)](https://github.com/gioamato/stateless-wordpress/blob/master/LICENSE)
 [![Docker Pulls](https://img.shields.io/docker/pulls/gioamato/stateless-wordpress)](https://hub.docker.com/r/gioamato/stateless-wordpress/tags)
 
@@ -10,6 +9,18 @@ Minimal, cloud-native, battle-tested WordPress environment meant to be used both
 ## Supported Architectures
 
 Images are published as multi-arch manifests for `linux/amd64` and `linux/arm64` (e.g. Apple Silicon, AWS Graviton, Raspberry Pi 4/5 with a 64-bit OS). Docker pulls the right variant automatically.
+
+## Image Tags
+
+Each image is published under three tags on [Docker Hub](https://hub.docker.com/r/gioamato/stateless-wordpress/tags):
+
+| Tag | Example | Moves when |
+|---|---|---|
+| `<image>-alpine` | `wordpress-alpine` | every release |
+| `<image>-<version>-alpine` | `wordpress-7.1.3-alpine` | every release of that upstream WordPress/NGINX version |
+| `<image>-<version>-alpine-<commit>` | `wordpress-7.1.3-alpine-83cf25e` | never: pin this one to roll back or to deploy a known build |
+
+A release is published only after both architectures pass the smoke test (see [Testing](#testing)), and only for the images whose directory changed.
 
 ## Usage
 

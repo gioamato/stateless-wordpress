@@ -1,0 +1,114 @@
+name: Build and test
+# Builds both images natively on each architecture and smoke-tests them together.
+# With push, the images listed in `images` are then pushed by digest (untagged);
+# release.yml tags them only once every architecture has passed.
+on:
+  workflow_call:
+    inputs:
+      push:
+        type: boolean
+        default: false
+      images:
+        description: JSON list of the images to push, e.g. ["wordpress","nginx"]
+        type: string
+        default: "[]"
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
+
+env:
+  REPOSITORY: docker.io/gioamato/stateless-wordpress
+
+jobs:
+  smoke:
+    name: smoke (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - arch: amd64
+          runner: ubuntu-latest
+        - arch: arm64
+          runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - uses: actions/checkout@v7
+    - uses: docker/setup-buildx-action@v4.4.1
+
+    - uses: docker/build-push-action@v7.4.0
+      with:
+        context: ./wordpress
+        platforms: linux/${{ matrix.arch }}
+        load: true
+        tags: stateless-wordpress:wordpress-test
+        cache-from: type=gha,scope=wordpress-${{ matrix.arch }}
+        cache-to: type=gha,mode=max,scope=wordpress-${{ matrix.arch }}
+
+    - uses: docker/build-push-action@v7.4.0
+      with:
+        context: ./nginx
+        platforms: linux/${{ matrix.arch }}
+        load: true
+        tags: stateless-wordpress:nginx-test
+        cache-from: type=gha,scope=nginx-${{ matrix.arch }}
+        cache-to: type=gha,mode=max,scope=nginx-${{ matrix.arch }}
+
+    - run: tests/smoke.sh
+      env:
+        SMOKE_NO_BUILD: "1"
+
+    # The push builds below reuse the builder's cache from the tested builds above
+    - if: inputs.push
+      uses: docker/login-action@v4.6.0
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - id: push-wordpress
+      if: inputs.push && contains(fromJSON(inputs.images), 'wordpress')
+      uses: docker/build-push-action@v7.4.0
+      with:
+        context: ./wordpress
+        platforms: linux/${{ matrix.arch }}
+        outputs: type=image,name=${{ env.REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
+        cache-from: type=gha,scope=wordpress-${{ matrix.arch }}
+
+    - id: push-nginx
+      if: inputs.push && contains(fromJSON(inputs.images), 'nginx')
+      uses: docker/build-push-action@v7.4.0
+      with:
+        context: ./nginx
+        platforms: linux/${{ matrix.arch }}
+        outputs: type=image,name=${{ env.REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
+        cache-from: type=gha,scope=nginx-${{ matrix.arch }}
+
+    - name: Export digests
+      if: inputs.push
+      env:
+        WORDPRESS_DIGEST: ${{ steps.push-wordpress.outputs.digest }}
+        NGINX_DIGEST: ${{ steps.push-nginx.outputs.digest }}
+      run: |
+        for image in wordpress nginx; do
+          var="${image^^}_DIGEST"
+          digest="${!var}"
+          mkdir -p "$RUNNER_TEMP/digests/$image"
+          if [ -n "$digest" ]; then touch "$RUNNER_TEMP/digests/$image/${digest#sha256:}"; fi
+        done
+
+    - if: inputs.push && contains(fromJSON(inputs.images), 'wordpress')
+      uses: actions/upload-artifact@v4
+      with:
+        name: digests-wordpress-${{ matrix.arch }}
+        path: ${{ runner.temp }}/digests/wordpress/*
+        if-no-files-found: error
+        retention-days: 1
+
+    - if: inputs.push && contains(fromJSON(inputs.images), 'nginx')
+      uses: actions/upload-artifact@v4
+      with:
+        name: digests-nginx-${{ matrix.arch }}
+        path: ${{ runner.temp }}/digests/nginx/*
+        if-no-files-found: error
+        retention-days: 1
