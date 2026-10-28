@@ -18,9 +18,19 @@ Each image is published under three tags on [Docker Hub](https://hub.docker.com/
 |---|---|---|
 | `<image>-alpine` | `wordpress-alpine` | every release |
 | `<image>-<version>-alpine` | `wordpress-7.1.3-alpine` | every release of that upstream WordPress/NGINX version |
-| `<image>-<version>-alpine-<commit>` | `wordpress-7.1.3-alpine-83cf25e` | never: pin this one to roll back or to deploy a known build |
+| `<image>-<version>-alpine-<commit>` | `wordpress-7.1.3-alpine-dee6de0` | never: each commit is released once, so use it to roll back to a known build |
 
 A release is published only after both architectures pass the smoke test (see [Testing](#testing)), and only for the images whose directory changed.
+
+### Pinning in production
+
+A tag is only as immutable as the registry account behind it, while a digest always resolves to the same bytes. For production, pin the version tag together with its multi-arch digest:
+
+```yaml
+image: gioamato/stateless-wordpress:wordpress-7.1.3-alpine@sha256:<digest>
+```
+
+The digest decides what is pulled and the tag keeps the reference readable; tools like Renovate can update the digest when a new release moves the tag. Every release on the [Releases page](https://github.com/gioamato/stateless-wordpress/releases) lists the ready-to-copy pin for each image it published.
 
 ## Usage
 
