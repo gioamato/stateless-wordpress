@@ -1,7 +1,6 @@
 # Stateless WordPress
 
-[![WordPress](https://github.com/gioamato/stateless-wordpress/actions/workflows/wordpress.yml/badge.svg)](https://github.com/gioamato/stateless-wordpress/actions/workflows/wordpress.yml)
-[![NGINX](https://github.com/gioamato/stateless-wordpress/actions/workflows/nginx.yml/badge.svg)](https://github.com/gioamato/stateless-wordpress/actions/workflows/nginx.yml)
+[![Release](https://github.com/gioamato/stateless-wordpress/actions/workflows/release.yml/badge.svg)](https://github.com/gioamato/stateless-wordpress/actions/workflows/release.yml)
 [![GitHub](https://img.shields.io/github/license/gioamato/stateless-wordpress)](https://github.com/gioamato/stateless-wordpress/blob/master/LICENSE)
 [![Docker Pulls](https://img.shields.io/docker/pulls/gioamato/stateless-wordpress)](https://hub.docker.com/r/gioamato/stateless-wordpress/tags)
 
@@ -10,6 +9,28 @@ Minimal, cloud-native, battle-tested WordPress environment meant to be used both
 ## Supported Architectures
 
 Images are published as multi-arch manifests for `linux/amd64` and `linux/arm64` (e.g. Apple Silicon, AWS Graviton, Raspberry Pi 4/5 with a 64-bit OS). Docker pulls the right variant automatically.
+
+## Image Tags
+
+Each image is published under three tags on [Docker Hub](https://hub.docker.com/r/gioamato/stateless-wordpress/tags):
+
+| Tag | Example | Moves when |
+|---|---|---|
+| `<image>-alpine` | `wordpress-alpine` | every release |
+| `<image>-<version>-alpine` | `wordpress-7.1.3-alpine` | every release of that upstream WordPress/NGINX version |
+| `<image>-<version>-alpine-<commit>` | `wordpress-7.1.3-alpine-dee6de0` | never: each commit is released once, so use it to roll back to a known build |
+
+A release is published only after both architectures pass the smoke test (see [Testing](#testing)), and only for the images whose directory changed.
+
+### Pinning in production
+
+A tag is only as immutable as the registry account behind it, while a digest always resolves to the same bytes. For production, pin the version tag together with its multi-arch digest:
+
+```yaml
+image: gioamato/stateless-wordpress:wordpress-7.1.3-alpine@sha256:<digest>
+```
+
+The digest decides what is pulled and the tag keeps the reference readable; tools like Renovate can update the digest when a new release moves the tag. Every release on the [Releases page](https://github.com/gioamato/stateless-wordpress/releases) lists the ready-to-copy pin for each image it published.
 
 ## Usage
 
@@ -42,6 +63,22 @@ kubectl apply -f https://raw.githubusercontent.com/gioamato/stateless-wordpress/
 # Open your browser and head to the service External IP
 # You will find the famous WordPress 5-minute install
 ```
+
+## Testing
+
+Every pull request runs the same checks you can run locally (only Docker is required):
+
+```bash
+# Lint Dockerfiles, shell scripts and workflows, and check composer.lock is in sync
+tests/lint.sh
+
+# Build both images, start the stack and test it end to end:
+# env-based PHP/FPM config, WordPress install, bundled plugins/theme/translations,
+# FastCGI cache, NGINX access rules and clean PHP/NGINX logs
+tests/smoke.sh
+```
+
+The smoke test uses its own Compose project and port (`SMOKE_PORT`, default `8089`), so it can run next to the local development stack.
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.

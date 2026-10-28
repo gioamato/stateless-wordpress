@@ -31,7 +31,7 @@ ENV PHP_OPCACHE_VALIDATE_TIMESTAMPS="0"
 
 # Install opcache and add the configuration file
 RUN docker-php-ext-install opcache
-ADD opcache.ini "$PHP_INI_DIR/conf.d/opcache.ini"
+COPY opcache.ini "$PHP_INI_DIR/conf.d/opcache.ini"
 
 # PHP-FPM defaults
 ENV PHP_FPM_PM="dynamic"
