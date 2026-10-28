@@ -118,7 +118,9 @@ if wp plugin activate --all >/dev/null; then pass "all plugins activate"; else f
 
 echo "# Front end and FastCGI cache"
 expect_status 200 /
-if curl -s "${BASE}/" | grep -qF "$SITE_TITLE"; then pass "/ shows the site title"; else fail "/ does not show the site title"; fi
+# Capture the page first: piping curl into grep -q fails under pipefail when grep exits early
+home_body="$(curl -s "${BASE}/")"
+if grep -qF "$SITE_TITLE" <<<"$home_body"; then pass "/ shows the site title"; else fail "/ does not show the site title"; fi
 expect_clean_page /
 expect_status 200 /wp-login.php
 expect_clean_page /wp-login.php
