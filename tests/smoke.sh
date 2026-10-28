@@ -38,11 +38,11 @@ expect_status() {
 	if [ "$got" = "$want" ]; then pass "GET ${path} -> ${want}"; else fail "GET ${path} -> ${got}, want ${want}"; fi
 }
 
-# usage: expect_header PATH HEADER VALUE
+# usage: expect_header PATH HEADER VALUE [curl args...]
 expect_header() {
-	local path="$1" header="$2" want="$3"
+	local path="$1" header="$2" want="$3"; shift 3
 	local got
-	got="$(curl -s -o /dev/null -D - "${BASE}${path}" | tr -d '\r' | awk -v h="${header,,}:" 'tolower($1) == h { print $2 }')"
+	got="$(curl -s -o /dev/null -D - "$@" "${BASE}${path}" | tr -d '\r' | awk -v h="${header,,}:" 'tolower($1) == h { print $2 }')"
 	if [ "$got" = "$want" ]; then pass "${path} ${header}: ${want}"; else fail "${path} ${header}: '${got}', want '${want}'"; fi
 }
 
@@ -127,6 +127,9 @@ expect_clean_page /wp-login.php
 expect_status 200 / -H 'X-Forwarded-Proto: https'
 curl -s -o /dev/null "${BASE}/"
 expect_header / X-Cache HIT
+# The forwarded scheme is part of the cache key, so a page cached for one scheme (e.g. a redirect
+# to HTTPS for a direct plain-HTTP request) is never served to requests that came in another way
+expect_header / X-Cache MISS -H 'X-Forwarded-Proto: smoke-test'
 expect_header /wp-login.php X-Cache BYPASS
 
 echo "# Access rules"
