@@ -9,6 +9,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-stateless-wordpress-smoke}"
+export WORDPRESS_IMAGE="${WORDPRESS_IMAGE:-stateless-wordpress:wordpress-test}"
+UPGRADED_IMAGE="stateless-wordpress:wordpress-smoke-upgrade"
 export SMOKE_PORT="${SMOKE_PORT:-8089}"
 BASE="http://localhost:${SMOKE_PORT}"
 SITE_TITLE="Smoke Test Site"
@@ -27,6 +29,7 @@ cleanup() {
 		compose logs --no-color --tail=200 || true
 	fi
 	compose --profile cli down -v --remove-orphans >/dev/null 2>&1 || true
+	docker rmi -f "$UPGRADED_IMAGE" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -85,6 +88,14 @@ if [ "$failures" -ne 0 ]; then
 	exit 1
 fi
 
+echo "# Stateless code volume and WordPress replicas"
+expect_eq "running WordPress replicas" 2 "$(compose ps -q wordpress | wc -l | tr -d ' ')"
+# Replicas share the volume: they sync one at a time, and only the first one copies the code
+expect_eq "code syncs at startup" 1 "$(compose logs wordpress | grep -c 'Syncing WordPress code')"
+nginx_config="$(compose exec -T nginx nginx -T 2>/dev/null)"
+expect_line "NGINX upstream" "        server wordpress:9000 resolve;" "$nginx_config"
+expect_line "NGINX cache lifetime (FASTCGI_CACHE_VALID)" "            fastcgi_cache_valid 200 302 2h;" "$nginx_config"
+
 echo "# Configuration from environment variables"
 expect_eq "memory_limit (php.ini from PHP_MEMORY_LIMIT)" 192M \
 	"$(compose exec -T wordpress php -r 'echo ini_get("memory_limit");')"
@@ -140,6 +151,12 @@ expect_header / X-Cache HIT
 expect_header / X-Cache MISS -H 'X-Forwarded-Proto: smoke-test'
 expect_header /wp-login.php X-Cache BYPASS
 
+# NGINX balances across the replicas: each one has served requests by now
+for replica in $(compose ps -q wordpress); do
+	served="$(docker logs "$replica" 2>&1 | grep -c '"GET ' || true)"
+	if [ "$served" -gt 0 ]; then pass "replica ${replica:0:12} served ${served} requests"; else fail "replica ${replica:0:12} served no requests"; fi
+done
+
 echo "# Access rules"
 expect_status 403 /wp-config.php
 expect_status 403 /wp-config-docker.php
@@ -151,6 +168,32 @@ expect_status 403 /wp-content/uploads/page.html
 expect_status 403 /wp-content/uploads/script.js
 # media in uploads is not caught by the deny rules (404: the file does not exist)
 expect_status 404 /wp-content/uploads/photo.png
+
+echo "# Code update while NGINX keeps the volume mounted"
+# Recreating only WordPress (as `docker compose up` does for a new image) leaves NGINX holding the volume:
+# the new code must still replace the old one
+# Derive the new image without a builder: in CI the default buildx builder can't see locally loaded images
+upgrade_dir="$(mktemp -d)"
+echo smoke-upgrade > "$upgrade_dir/smoke-upgrade.txt"
+upgrade_container="$(docker create "$WORDPRESS_IMAGE")"
+docker cp "$upgrade_dir/smoke-upgrade.txt" "$upgrade_container:/usr/src/wordpress/smoke-upgrade.txt"
+docker commit "$upgrade_container" "$UPGRADED_IMAGE" >/dev/null
+docker rm "$upgrade_container" >/dev/null
+rm -rf "$upgrade_dir"
+WORDPRESS_IMAGE="$UPGRADED_IMAGE" compose up -d --no-build wordpress
+for _ in $(seq 1 60); do
+	[ "$(curl -s -o /dev/null -w '%{http_code}' "${BASE}/smoke-upgrade.txt")" = 200 ] && break
+	sleep 1
+done
+expect_eq "file added by the new image" smoke-upgrade "$(curl -s "${BASE}/smoke-upgrade.txt")"
+expect_eq "code syncs after the update" 1 "$(compose logs wordpress | grep -c 'Syncing WordPress code')"
+# Reaches PHP (never cached) once NGINX has re-resolved the recreated replicas (every 10s)
+for _ in $(seq 1 60); do
+	[ "$(curl -s -o /dev/null -w '%{http_code}' "${BASE}/wp-login.php")" = 200 ] && break
+	sleep 1
+done
+expect_status 200 /wp-login.php
+if wp core is-installed >/dev/null 2>&1; then pass "site still installed (data is in the database)"; else fail "site is no longer installed"; fi
 
 echo "# Logs"
 if errors="$(compose logs --no-color wordpress nginx | grep -E 'PHP (Fatal|Parse|Warning|Deprecated)|\[(emerg|alert|crit)\]')"; then

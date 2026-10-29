@@ -156,6 +156,11 @@ spec:
       - name: nginx
         image: gioamato/stateless-wordpress:nginx-alpine
         imagePullPolicy: Always
+        env:
+        # Each pod has its own FastCGI cache and a purge only clears the pod that handled it,
+        # so keep pages short-lived to bound how stale the other replicas can get
+        - name: FASTCGI_CACHE_VALID
+          value: 5m
         ports:
         - containerPort: 80
         readinessProbe:
@@ -178,6 +183,9 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /var/www/html
+      # WordPress code (synced from the image when the pod starts) and the FastCGI cache. Nothing in it
+      # is data: configure media offloading (WP_STATELESS_MEDIA_* or MICROSOFT_AZURE_* in the Secret),
+      # or uploads stay on one pod and are lost when it restarts
       volumes:
       - name: data
         emptyDir: {}

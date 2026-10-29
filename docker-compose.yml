@@ -1,12 +1,16 @@
-version: '3.7'
-
 volumes:
   db-data:
-  wp-data:
+  # WordPress code (synced from the image on every start) and the FastCGI cache, shared by NGINX and PHP-FPM.
+  # In memory and never persisted, like the Kubernetes emptyDir: there is no data in it, since media are
+  # offloaded to object storage (see "Data and persistence" in the README)
+  wp-code:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1g
 
 services:
   db:
-    container_name: stateless-wordpress_db
     image: mysql:8.4
     restart: always
     volumes:
@@ -18,11 +22,19 @@ services:
       MYSQL_PASSWORD: wordpress
 
   wordpress:
-    container_name: stateless-wordpress_wordpress
     build: ./wordpress
     restart: always
+    # Stateless PHP-FPM replicas behind one NGINX, which balances requests across them
+    deploy:
+      replicas: ${WORDPRESS_REPLICAS:-2}
     volumes:
-      - wp-data:/var/www/html
+      # nocopy: the entrypoint fills the volume itself, and Docker copying the image's /var/www/html into
+      # it would race between replicas created at the same time ("mkdir .../wp-content: file exists")
+      - type: volume
+        source: wp-code
+        target: /var/www/html
+        volume:
+          nocopy: true
     depends_on:
       - db
     environment:
@@ -32,14 +44,17 @@ services:
       WORDPRESS_DB_PASSWORD: wordpress
 
   nginx:
-    container_name: stateless-wordpress_nginx
     build: ./nginx
     restart: always
     volumes:
-      - wp-data:/var/www/html
-    depends_on: 
+      - type: volume
+        source: wp-code
+        target: /var/www/html
+        volume:
+          nocopy: true
+    depends_on:
       - wordpress
-    ports: 
+    ports:
       - "8080:80"
     environment:
       UPSTREAM_SERVER: wordpress
