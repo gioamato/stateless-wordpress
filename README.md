@@ -41,12 +41,14 @@ The digest decides what is pulled and the tag keeps the reference readable; tool
 git clone https://github.com/gioamato/stateless-wordpress.git
 cd stateless-wordpress
 
-# Spin it up with Docker Compose
+# Spin it up with Docker Compose: MySQL, NGINX and 2 WordPress (PHP-FPM) replicas
 docker compose up -d
 
 # Open your browser and head to http://localhost:8080
 # You will find the famous WordPress 5-minute install
 ```
+
+Only the database is persisted. Configure media offloading (see [Data and persistence](#data-and-persistence)) before uploading anything you want to keep.
 
 ### Kubernetes
 
@@ -81,6 +83,37 @@ On top of the official template, `wp-config-stateless.php` disables file edits a
 
 The `WP_DB_*` and `WP_*_KEY`/`WP_*_SALT` names used by earlier versions of this image still work when the matching `WORDPRESS_*` variable is unset, but are deprecated.
 
+## Data and persistence
+
+Following the official image's ["static image / updates-via-redeploy"](https://hub.docker.com/_/wordpress) model, the containers hold no data:
+
+| What | Where | Persisted |
+|---|---|---|
+| WordPress core, plugins, themes, translations, `wp-config.php` | The image | Never: update by deploying a new image |
+| Media uploads | Object storage, through the bundled offloading plugins | Yes, outside the containers |
+| Content and settings | MySQL | Yes, outside the containers |
+| FastCGI cache | Next to the code | No |
+
+`/var/www/html` is shared between NGINX (static files) and PHP-FPM, and lives only as long as the containers: an in-memory volume in Docker Compose, an `emptyDir` in Kubernetes. On every start the WordPress container compares the code in the image with what the volume holds and, if they differ, wipes the volume and copies the code in again, so a new image always takes effect, even while NGINX keeps the volume mounted.
+
+Media uploads must be offloaded, since the volume is wiped and is not shared between Kubernetes pods. Configure [WP-Stateless](https://wordpress.org/plugins/wp-stateless/) (Google Cloud Storage, e.g. `WP_STATELESS_MEDIA_MODE=stateless`) or [Microsoft Azure Storage for WordPress](https://wordpress.org/plugins/windows-azure-storage/) through environment variables (see [Configuration](#configuration)) or in wp-admin. Without it, uploads work until the next restart or update.
+
+## Scaling
+
+- Docker Compose runs one NGINX in front of `WORDPRESS_REPLICAS` PHP-FPM replicas (default 2), e.g. `WORDPRESS_REPLICAS=4 docker compose up -d`. NGINX re-resolves the `wordpress` service every 10 seconds and balances requests across the replicas, so it follows scaling and updates without a restart.
+- Kubernetes scales whole pods (NGINX and PHP-FPM side by side): set `replicas` in `deploy/kubernetes/deploy.yaml`.
+
+With more than one replica, set the `WORDPRESS_*_KEY`/`WORDPRESS_*_SALT` variables, or let WordPress keep its generated salts in the database (the default when they are unset); never let each replica generate its own.
+
+## FastCGI cache
+
+NGINX caches pages for anonymous visitors for `FASTCGI_CACHE_VALID` (default `1h`; set it on the NGINX container, e.g. `10m`). The bundled [Nginx Cache](https://wordpress.org/plugins/nginx-cache/) plugin purges it when content changes.
+
+Each NGINX instance keeps its own cache:
+
+- Docker Compose has a single NGINX, so a purge clears the whole cache.
+- In Kubernetes every pod has its own NGINX and cache, and a purge only reaches the pod that handled the request: the other pods keep serving their cached pages until they expire. The example deployment sets `FASTCGI_CACHE_VALID=5m` to bound that; lower it if content must show up faster, or put a shared cache (e.g. a CDN) in front instead.
+
 ## Testing
 
 Every pull request runs the same checks you can run locally (only Docker is required):
@@ -90,8 +123,9 @@ Every pull request runs the same checks you can run locally (only Docker is requ
 tests/lint.sh
 
 # Build both images, start the stack and test it end to end:
-# env-based PHP/FPM config, WordPress install, bundled plugins/theme/translations,
-# FastCGI cache, NGINX access rules and clean PHP/NGINX logs
+# env-based PHP/FPM/NGINX config, WordPress install, bundled plugins/theme/translations,
+# replicas and load balancing, FastCGI cache, NGINX access rules, a code update on the
+# running stack and clean PHP/NGINX logs
 tests/smoke.sh
 ```
 

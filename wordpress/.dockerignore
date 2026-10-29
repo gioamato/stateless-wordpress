@@ -10,3 +10,4 @@
 !wp-config-stateless.php
 !wp-config-env-compat.php
 !build-wp-config.sh
+!stateless-entrypoint.sh

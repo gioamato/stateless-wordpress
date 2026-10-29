@@ -57,3 +57,8 @@ RUN build-wp-config
 
 # Copy WordPress files
 COPY --chown=www-data:www-data --from=build /usr/src/app/wp-content /usr/src/wordpress/wp-content
+
+# Refresh /var/www/html from the code above on every start (see stateless-entrypoint.sh)
+COPY stateless-entrypoint.sh /usr/local/bin/stateless-entrypoint
+ENTRYPOINT ["stateless-entrypoint"]
+CMD ["php-fpm"]
