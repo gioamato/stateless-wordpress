@@ -28,7 +28,13 @@ services:
     deploy:
       replicas: ${WORDPRESS_REPLICAS:-2}
     volumes:
-      - wp-code:/var/www/html
+      # nocopy: the entrypoint fills the volume itself, and Docker copying the image's /var/www/html into
+      # it would race between replicas created at the same time ("mkdir .../wp-content: file exists")
+      - type: volume
+        source: wp-code
+        target: /var/www/html
+        volume:
+          nocopy: true
     depends_on:
       - db
     environment:
@@ -41,7 +47,11 @@ services:
     build: ./nginx
     restart: always
     volumes:
-      - wp-code:/var/www/html
+      - type: volume
+        source: wp-code
+        target: /var/www/html
+        volume:
+          nocopy: true
     depends_on:
       - wordpress
     ports:

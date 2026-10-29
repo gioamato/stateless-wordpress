@@ -45,7 +45,11 @@ services:
     # www-data on the Alpine-based images, so wp-cli can read the shared volume
     user: "82:82"
     volumes:
-      - wp-code:/var/www/html
+      - type: volume
+        source: wp-code
+        target: /var/www/html
+        volume:
+          nocopy: true
     depends_on:
       - db
     secrets: [ gcs-bucket ]
