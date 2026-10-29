@@ -161,6 +161,9 @@ spec:
         # so keep pages short-lived to bound how stale the other replicas can get
         - name: FASTCGI_CACHE_VALID
           value: 5m
+        # Trust the ingress controller's pod network to get real client IPs (see "Client IP addresses")
+        # - name: REAL_IP_FROM
+        #   value: 10.244.0.0/16
         ports:
         - containerPort: 80
         readinessProbe:

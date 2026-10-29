@@ -27,6 +27,8 @@ file_env() {
 envs=(
 		UPSTREAM_SERVER
 		FASTCGI_CACHE_VALID
+		REAL_IP_FROM
+		REAL_IP_HEADER
 	)
 
 haveConfig=
@@ -62,6 +64,29 @@ if ! [[ "$FASTCGI_CACHE_VALID" =~ ^[0-9]+(ms|s|m|h|d|w|M|y)?$ ]]; then
 	echo >&2 "error: FASTCGI_CACHE_VALID must be an NGINX time such as 10m or 1h, got '$FASTCGI_CACHE_VALID'"
 	exit 1
 fi
+
+# Client addresses behind reverse proxies (NGINX Proxy Manager, an ingress controller, a CDN...): trust the
+# REAL_IP_HEADER (default X-Forwarded-For) only from the REAL_IP_FROM addresses/CIDRs (comma or space separated).
+# With real_ip_recursive, X-Forwarded-For is walked back past every trusted proxy to the first untrusted address.
+: "${REAL_IP_HEADER:=X-Forwarded-For}"
+real_ip_conf=""
+if [ -n "${REAL_IP_FROM:-}" ]; then
+	if ! [[ "$REAL_IP_HEADER" =~ ^[A-Za-z0-9-]+$ ]]; then
+		echo >&2 "error: REAL_IP_HEADER must be a header name such as X-Forwarded-For, got '$REAL_IP_HEADER'"
+		exit 1
+	fi
+	IFS=', ' read -r -a real_ip_sources <<< "$REAL_IP_FROM"
+	for source in "${real_ip_sources[@]}"; do
+		if ! [[ "$source" =~ ^([0-9a-fA-F:.]+(/[0-9]{1,3})?|unix:)$ ]]; then
+			echo >&2 "error: REAL_IP_FROM entries must be addresses or CIDRs, got '$source'"
+			exit 1
+		fi
+		real_ip_conf+="set_real_ip_from $source;"$'\n'
+	done
+	real_ip_conf+="real_ip_header $REAL_IP_HEADER;"$'\n'"real_ip_recursive on;"$'\n'
+	echo >&2 "Taking client addresses from $REAL_IP_HEADER when sent by: $REAL_IP_FROM"
+fi
+printf '%s' "$real_ip_conf" > /etc/nginx/real-ip.conf
 
 sed -i \
 	-e "s|#{UPSTREAM_SERVER}|$UPSTREAM_SERVER|g" \

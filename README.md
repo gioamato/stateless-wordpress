@@ -114,6 +114,24 @@ Each NGINX instance keeps its own cache:
 - Docker Compose has a single NGINX, so a purge clears the whole cache.
 - In Kubernetes every pod has its own NGINX and cache, and a purge only reaches the pod that handled the request: the other pods keep serving their cached pages until they expire. The example deployment sets `FASTCGI_CACHE_VALID=5m` to bound that; lower it if content must show up faster, or put a shared cache (e.g. a CDN) in front instead.
 
+## Client IP addresses
+
+Behind a reverse proxy, NGINX only sees the proxy's address. Tell it which proxies to trust, and it takes the client address from the header they send, for both its logs and WordPress (`REMOTE_ADDR`):
+
+- `REAL_IP_FROM`: addresses or CIDRs of the proxies in front of NGINX, comma or space separated. Unset by default: then the direct peer is the client, and forwarded headers are ignored, since anyone could send them.
+- `REAL_IP_HEADER`: the header carrying the client address (default `X-Forwarded-For`). With `X-Forwarded-For`, NGINX walks back past every trusted address to the first untrusted one, so chains of proxies work as long as all of them are listed.
+
+Set them on the NGINX container. Common setups:
+
+| In front of NGINX | `REAL_IP_FROM` | `REAL_IP_HEADER` |
+|---|---|---|
+| Nothing (port published directly) | unset | |
+| NGINX Proxy Manager, Traefik, Caddy... on the same Docker host | the subnet of the Docker network they reach NGINX on (`docker network inspect`), e.g. `172.18.0.0/16` | default |
+| Kubernetes ingress controller | the pod network CIDR (where the controller pods run), e.g. `10.244.0.0/16` | default |
+| A CDN, e.g. Cloudflare | its published IP ranges, plus any proxy between it and NGINX | default, or the CDN's own header such as `CF-Connecting-IP` |
+
+Only list addresses you control or trust: anything in `REAL_IP_FROM` can make NGINX and WordPress believe any client address.
+
 ## Testing
 
 Every pull request runs the same checks you can run locally (only Docker is required):
@@ -124,7 +142,8 @@ tests/lint.sh
 
 # Build both images, start the stack and test it end to end:
 # env-based PHP/FPM/NGINX config, WordPress install, bundled plugins/theme/translations,
-# replicas and load balancing, FastCGI cache, NGINX access rules, a code update on the
+# replicas and load balancing, FastCGI cache, client addresses from trusted proxies only,
+# NGINX access rules, a code update on the
 # running stack and clean PHP/NGINX logs
 tests/smoke.sh
 ```

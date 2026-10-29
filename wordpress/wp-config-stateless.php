@@ -26,9 +26,3 @@ foreach ( getenv() as $stateless_env => $stateless_value ) {
 	defined( $stateless_env ) || define( $stateless_env, $stateless_value );
 }
 unset( $stateless_env, $stateless_value );
-
-// Reverse Proxy
-if ( isset( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
-	$http_x_headers = explode( ',', $_SERVER['HTTP_X_FORWARDED_FOR'] );
-	$_SERVER['REMOTE_ADDR'] = $http_x_headers[0];
-}
