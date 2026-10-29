@@ -7,4 +7,6 @@
 !opcache.ini
 !php-fpm.conf
 !php.ini
-!wp-config.php
+!wp-config-stateless.php
+!wp-config-env-compat.php
+!build-wp-config.sh

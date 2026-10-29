@@ -64,6 +64,23 @@ kubectl apply -f https://raw.githubusercontent.com/gioamato/stateless-wordpress/
 # You will find the famous WordPress 5-minute install
 ```
 
+## Configuration
+
+`wp-config.php` is built from the [official WordPress image](https://hub.docker.com/_/wordpress)'s `wp-config-docker.php`, so the official variables work unchanged:
+
+- `WORDPRESS_DB_HOST`, `WORDPRESS_DB_USER`, `WORDPRESS_DB_PASSWORD`, `WORDPRESS_DB_NAME`, `WORDPRESS_DB_CHARSET`, `WORDPRESS_DB_COLLATE`, `WORDPRESS_TABLE_PREFIX`
+- `WORDPRESS_AUTH_KEY`, `WORDPRESS_SECURE_AUTH_KEY`, `WORDPRESS_LOGGED_IN_KEY`, `WORDPRESS_NONCE_KEY`, `WORDPRESS_AUTH_SALT`, `WORDPRESS_SECURE_AUTH_SALT`, `WORDPRESS_LOGGED_IN_SALT`, `WORDPRESS_NONCE_SALT`. Set them when running more than one replica; when unset, WordPress keeps generated salts in the database.
+- `WORDPRESS_DEBUG` (any non-empty value enables `WP_DEBUG`) and `WORDPRESS_CONFIG_EXTRA` (PHP code evaluated in `wp-config.php`)
+- Append `_FILE` to any of them to read the value from a file instead, e.g. `WORDPRESS_DB_PASSWORD_FILE=/run/secrets/db-password` for Docker or Kubernetes secrets.
+
+On top of the official template, `wp-config-stateless.php` disables file edits and automatic updates (WordPress, plugins and themes come from the image and are updated by redeploying), and turns media offloading settings into the constants the bundled plugins read:
+
+- [WP-Stateless](https://wordpress.org/plugins/wp-stateless/) (Google Cloud Storage): any `WP_STATELESS_MEDIA_*` variable, e.g. `WP_STATELESS_MEDIA_MODE=stateless`, `WP_STATELESS_MEDIA_BUCKET`, `WP_STATELESS_MEDIA_JSON_KEY`; the plugin also reads `GOOGLE_APPLICATION_CREDENTIALS` itself.
+- [Microsoft Azure Storage for WordPress](https://wordpress.org/plugins/windows-azure-storage/): any `MICROSOFT_AZURE_*` variable, e.g. `MICROSOFT_AZURE_ACCOUNT_NAME`, `MICROSOFT_AZURE_ACCOUNT_KEY`, `MICROSOFT_AZURE_CONTAINER`, `MICROSOFT_AZURE_USE_FOR_DEFAULT_UPLOAD=1`.
+- Append `_FILE` to read a value from a file, e.g. `MICROSOFT_AZURE_ACCOUNT_KEY_FILE=/run/secrets/azure-key`.
+
+The `WP_DB_*` and `WP_*_KEY`/`WP_*_SALT` names used by earlier versions of this image still work when the matching `WORDPRESS_*` variable is unset, but are deprecated.
+
 ## Testing
 
 Every pull request runs the same checks you can run locally (only Docker is required):
