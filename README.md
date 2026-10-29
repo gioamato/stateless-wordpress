@@ -116,6 +116,24 @@ NGINX caches pages for anonymous visitors for `FASTCGI_CACHE_VALID` (default `1h
 - With a single NGINX (e.g. Docker Compose), a purge clears the whole cache.
 - With several (e.g. one per Kubernetes pod), a purge only clears the instance that handled the request; the others keep serving their cached pages until they expire. The Kubernetes example sets `FASTCGI_CACHE_VALID=5m` to bound that; lower it if changes must show up faster, or put a shared cache (e.g. a CDN) in front.
 
+## Client IP addresses
+
+Behind a reverse proxy, NGINX only sees the proxy's address. Tell it which proxies to trust, and it takes the client address from the header they send, for both its logs and WordPress (`REMOTE_ADDR`):
+
+- `REAL_IP_FROM`: addresses or CIDRs of the proxies in front of NGINX, comma or space separated. Unset by default: then the direct peer is the client, and forwarded headers are ignored, since anyone could send them.
+- `REAL_IP_HEADER`: the header carrying the client address (default `X-Forwarded-For`). With `X-Forwarded-For`, NGINX walks back past every trusted address to the first untrusted one, so chains of proxies work as long as all of them are listed.
+
+Set them on the NGINX container. Common setups:
+
+| In front of NGINX | `REAL_IP_FROM` | `REAL_IP_HEADER` |
+|---|---|---|
+| Nothing (port published directly) | unset | |
+| NGINX Proxy Manager, Traefik, Caddy... on the same Docker host | the subnet of the Docker network they reach NGINX on (`docker network inspect`), e.g. `172.18.0.0/16` | default |
+| Kubernetes ingress controller | the pod network CIDR (where the controller pods run), e.g. `10.244.0.0/16` | default |
+| A CDN, e.g. Cloudflare | its published IP ranges, plus any proxy between it and NGINX | default, or the CDN's own header such as `CF-Connecting-IP` |
+
+Only list addresses you control or trust: anything in `REAL_IP_FROM` can make NGINX and WordPress believe any client address.
+
 ## Testing
 
 Every pull request runs the same checks you can run locally (only Docker is required):
@@ -125,8 +143,9 @@ Every pull request runs the same checks you can run locally (only Docker is requ
 tests/lint.sh
 
 # Build both images, start the stack and test it end to end:
-# env-based PHP/FPM config, WordPress install, bundled plugins/theme/translations,
-# FastCGI cache, NGINX access rules and clean PHP/NGINX logs
+# env-based PHP/FPM/NGINX config, WordPress install, stateful and stateless modes,
+# bundled plugins/theme/translations, FastCGI cache, client addresses from trusted
+# proxies only, NGINX access rules and clean PHP/NGINX logs
 tests/smoke.sh
 ```
 
