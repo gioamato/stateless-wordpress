@@ -10,6 +10,7 @@ cd "$(dirname "$0")/.."
 
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-stateless-wordpress-smoke}"
 export WORDPRESS_IMAGE="${WORDPRESS_IMAGE:-stateless-wordpress:wordpress-test}"
+export NGINX_IMAGE="${NGINX_IMAGE:-stateless-wordpress:nginx-test}"
 UPGRADED_IMAGE="stateless-wordpress:wordpress-smoke-upgrade"
 export SMOKE_PORT="${SMOKE_PORT:-8089}"
 BASE="http://localhost:${SMOKE_PORT}"
@@ -156,6 +157,28 @@ for replica in $(compose ps -q wordpress); do
 	served="$(docker logs "$replica" 2>&1 | grep -c '"GET ' || true)"
 	if [ "$served" -gt 0 ]; then pass "replica ${replica:0:12} served ${served} requests"; else fail "replica ${replica:0:12} served no requests"; fi
 done
+
+echo "# Client address (REAL_IP_FROM trusts only the network gateway, where requests from the host arrive)"
+# A probe printing the REMOTE_ADDR that WordPress sees after loading wp-config.php (wp-*.php is never
+# cached); php-fpm's own access log can't tell, since it logs the FastCGI peer (NGINX)
+# shellcheck disable=SC2016 # PHP code, not shell expansions
+echo '<?php require __DIR__ . "/wp-load.php"; echo $_SERVER["REMOTE_ADDR"];' \
+	| compose exec -T wordpress sh -c 'cat > /var/www/html/wp-ip-probe.php'
+expect_eq "REMOTE_ADDR forwarded by a trusted proxy" 203.0.113.7 \
+	"$(curl -s -H 'X-Forwarded-For: 203.0.113.7' "${BASE}/wp-ip-probe.php")"
+# A WordPress replica is not a trusted proxy: the address it forwards must be ignored
+replica_ip="$(compose exec -T wordpress hostname -i | tr -d '[:space:]')"
+expect_eq "REMOTE_ADDR when an untrusted peer forwards an address" "$replica_ip" \
+	"$(compose exec -T wordpress curl -s -H 'X-Forwarded-For: 198.51.100.9' http://nginx/wp-ip-probe.php)"
+compose exec -T wordpress rm -f /var/www/html/wp-ip-probe.php
+# An invalid REAL_IP_FROM stops NGINX before it starts (instead of writing a broken or wider config)
+real_ip_check="$(timeout 30 docker run --rm -e UPSTREAM_SERVER=127.0.0.1 -e 'REAL_IP_FROM=10.0.0.0/8; evil' \
+	"$NGINX_IMAGE" 2>&1)" && real_ip_status=0 || real_ip_status=$?
+if [ "$real_ip_status" -eq 1 ] && grep -q "REAL_IP_FROM entries must be addresses or CIDRs" <<<"$real_ip_check"; then
+	pass "invalid REAL_IP_FROM is rejected"
+else
+	fail "invalid REAL_IP_FROM was not rejected (exit ${real_ip_status}): ${real_ip_check}"
+fi
 
 echo "# Access rules"
 expect_status 403 /wp-config.php

@@ -58,3 +58,5 @@ services:
       - "8080:80"
     environment:
       UPSTREAM_SERVER: wordpress
+      # Behind a reverse proxy (e.g. NGINX Proxy Manager), trust its address(es) to get real client IPs:
+      # REAL_IP_FROM: 172.18.0.0/16

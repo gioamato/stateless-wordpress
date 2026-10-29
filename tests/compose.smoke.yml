@@ -4,6 +4,8 @@
 # - sets non-default PHP/FPM/NGINX values, so the test can prove env vars reach their configuration
 # - reads the DB password from a *_FILE secret and the DB user from a deprecated WP_* variable (web side),
 #   and passes media offloading settings as plain and *_FILE variables (wp-cli side)
+# - pins the network subnet, so NGINX can trust exactly its gateway (where requests from the host arrive)
+#   as a reverse proxy
 # - adds a wp-cli service to inspect the installed site
 services:
   db:
@@ -38,6 +40,7 @@ services:
       - "127.0.0.1:${SMOKE_PORT:-8089}:80"
     environment:
       FASTCGI_CACHE_VALID: 2h
+      REAL_IP_FROM: 172.31.250.1
 
   cli:
     image: wordpress:cli-2.12.0
@@ -60,6 +63,13 @@ services:
       WORDPRESS_DB_PASSWORD: wordpress
       MICROSOFT_AZURE_CONTAINER: smoke-container
       WP_STATELESS_MEDIA_BUCKET_FILE: /run/secrets/gcs-bucket
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24
+          gateway: 172.31.250.1
 
 secrets:
   db-password:
