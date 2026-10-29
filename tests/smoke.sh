@@ -108,6 +108,14 @@ install_body="$(curl -s -X POST "${BASE}/wp-admin/install.php?step=2" \
 if grep -q 'Success!' <<<"$install_body"; then pass "install.php step 2"; else fail "install.php step 2 did not report success"; fi
 if wp core is-installed >/dev/null 2>&1; then pass "wp core is-installed"; else fail "wp core is-installed"; fi
 
+echo "# wp-config.php (official template with the stateless hooks)"
+# The web side reads WORDPRESS_DB_PASSWORD_FILE and the deprecated WP_DB_USER (neither default would connect):
+# the install above proves both
+expect_eq "MICROSOFT_AZURE_CONTAINER (offloading constant from an env variable)" smoke-container \
+	"$(wp eval 'echo MICROSOFT_AZURE_CONTAINER;')"
+expect_eq "WP_STATELESS_MEDIA_BUCKET (offloading constant from a *_FILE secret)" smoke-bucket \
+	"$(wp eval 'echo WP_STATELESS_MEDIA_BUCKET;')"
+
 echo "# Bundled plugins, theme and translations"
 plugins="$(wp plugin list --field=name)"
 for plugin in nginx-cache windows-azure-storage wp-stateless; do expect_line "plugins" "$plugin" "$plugins"; done
@@ -134,6 +142,9 @@ expect_header /wp-login.php X-Cache BYPASS
 
 echo "# Access rules"
 expect_status 403 /wp-config.php
+expect_status 403 /wp-config-docker.php
+expect_status 403 /wp-config-stateless.php
+expect_status 403 /wp-config-sample.php
 expect_status 403 /.htaccess
 expect_status 403 /wp-content/uploads/shell.php
 expect_status 403 /wp-content/uploads/page.html

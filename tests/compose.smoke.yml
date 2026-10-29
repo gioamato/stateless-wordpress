@@ -2,6 +2,8 @@
 # - drops the fixed container names and binds a separate port, so it can run next to a dev stack
 # - waits for MySQL to be healthy before starting WordPress
 # - sets non-default PHP/FPM values, so the test can prove env vars reach php.ini and the FPM pool
+# - reads the DB password from a *_FILE secret and the DB user from a deprecated WP_* variable (web side),
+#   and passes media offloading settings as plain and *_FILE variables (wp-cli side)
 # - adds a wp-cli service to inspect the installed site
 services:
   db:
@@ -20,9 +22,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    secrets: [ db-password ]
     environment:
       PHP_MEMORY_LIMIT: 192M
       PHP_FPM_MAX_CHILDREN: "7"
+      WORDPRESS_DB_PASSWORD: !reset null
+      WORDPRESS_DB_PASSWORD_FILE: /run/secrets/db-password
+      WORDPRESS_DB_USER: !reset null
+      WP_DB_USER: wordpress
 
   nginx:
     container_name: !reset null
@@ -40,8 +47,17 @@ services:
       - wp-data:/var/www/html
     depends_on:
       - db
+    secrets: [ gcs-bucket ]
     environment:
-      WP_DB_HOST: db
-      WP_DB_NAME: wordpress
-      WP_DB_USER: wordpress
-      WP_DB_PASSWORD: wordpress
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      MICROSOFT_AZURE_CONTAINER: smoke-container
+      WP_STATELESS_MEDIA_BUCKET_FILE: /run/secrets/gcs-bucket
+
+secrets:
+  db-password:
+    file: ./tests/secrets/db-password
+  gcs-bucket:
+    file: ./tests/secrets/gcs-bucket

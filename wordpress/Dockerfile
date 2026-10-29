@@ -49,7 +49,11 @@ COPY ./php-fpm.conf /usr/local/etc/php-fpm.d/zzz-custom.conf
 RUN rm -r /usr/src/wordpress/wp-content/themes/*
 RUN rm -r /usr/src/wordpress/wp-content/plugins/*
 
+# wp-config.php is the official image's wp-config-docker.php (WORDPRESS_* variables, *_FILE secrets),
+# with hooks for this repo's stateless settings and the deprecated WP_* variable names
+COPY --chown=www-data:www-data wp-config-stateless.php wp-config-env-compat.php /usr/src/wordpress/
+COPY build-wp-config.sh /usr/local/bin/build-wp-config
+RUN build-wp-config
+
 # Copy WordPress files
-# TODO: Use wp-config-docker.php from the WordPress official Docker image
-COPY --chown=www-data:www-data wp-config.php /usr/src/wordpress/wp-config.php
 COPY --chown=www-data:www-data --from=build /usr/src/app/wp-content /usr/src/wordpress/wp-content
