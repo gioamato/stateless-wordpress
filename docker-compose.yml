@@ -2,6 +2,8 @@ version: '3.7'
 
 volumes:
   db-data:
+  # Stateful mode: WordPress is copied in on first boot and then installs/updates plugins, themes and itself
+  # here. For a stateless deployment set WORDPRESS_STATELESS=1 and offload media (see "Environments")
   wp-data:
 
 services:

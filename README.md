@@ -17,8 +17,10 @@ Each image is published under three tags on [Docker Hub](https://hub.docker.com/
 | Tag | Example | Moves when |
 |---|---|---|
 | `<image>-alpine` | `wordpress-alpine` | every release |
-| `<image>-<version>-alpine` | `wordpress-7.1.3-alpine` | every release of that upstream WordPress/NGINX version |
-| `<image>-<version>-alpine-<commit>` | `wordpress-7.1.3-alpine-dee6de0` | never: each commit is released once, so use it to roll back to a known build |
+| `<image>-<version>-alpine` | `wordpress-php8.3-alpine`, `nginx-1.31.8-alpine` | every release on that PHP (WordPress) or NGINX version |
+| `<image>-<version>-alpine-<commit>` | `wordpress-php8.3-alpine-dee6de0` | never: each commit is released once, so use it to roll back to a known build |
+
+The WordPress image is tagged by PHP version, like the official image's `php8.3-fpm-alpine`: WordPress itself is copied in on first boot and then kept up to date by its own updater (see [Environments](#environments)).
 
 A release is published only after both architectures pass the smoke test (see [Testing](#testing)), and only for the images whose directory changed.
 
@@ -27,7 +29,7 @@ A release is published only after both architectures pass the smoke test (see [T
 A tag is only as immutable as the registry account behind it, while a digest always resolves to the same bytes. For production, pin the version tag together with its multi-arch digest:
 
 ```yaml
-image: gioamato/stateless-wordpress:wordpress-7.1.3-alpine@sha256:<digest>
+image: gioamato/stateless-wordpress:wordpress-php8.3-alpine@sha256:<digest>
 ```
 
 The digest decides what is pulled and the tag keeps the reference readable; tools like Renovate can update the digest when a new release moves the tag. Every release on the [Releases page](https://github.com/gioamato/stateless-wordpress/releases) lists the ready-to-copy pin for each image it published.
@@ -41,7 +43,7 @@ The digest decides what is pulled and the tag keeps the reference readable; tool
 git clone https://github.com/gioamato/stateless-wordpress.git
 cd stateless-wordpress
 
-# Spin it up with Docker Compose
+# Spin it up with Docker Compose (stateful: WordPress lives in the wp-data volume and updates itself)
 docker compose up -d
 
 # Open your browser and head to http://localhost:8080
@@ -56,13 +58,37 @@ kubectl apply -f https://raw.githubusercontent.com/gioamato/stateless-wordpress/
 
 # The namespace 'stateless-wordpress' is created to host the example resources:
 # - 1 Stateful MySQL replica with emptyDir volume (data lost on restart)
-# - 3 Stateless WordPress replicas (horizontal scaling)
+# - 3 Stateless WordPress replicas (horizontal scaling, WORDPRESS_STATELESS=1: offload media, see Environments)
 # - A Secret storing WordPress Enviroment Configuration
 # - A Service with type LoadBalancer to expose the app
 
 # Open your browser and head to the service External IP
 # You will find the famous WordPress 5-minute install
 ```
+
+## Environments
+
+The same image runs in two modes, chosen per deployment with `WORDPRESS_STATELESS` on the WordPress container. In both, the WordPress container copies WordPress, plugins and themes from the image into `/var/www/html` when that directory is empty (the official image's first-boot copy), and NGINX serves static files from the same volume.
+
+| | Stateful (default) | Stateless (`WORDPRESS_STATELESS=1`) |
+|---|---|---|
+| For | Docker / Docker Compose with persistent volumes | Kubernetes or any platform without persistent storage for `/var/www/html` (e.g. an `emptyDir`), several replicas |
+| `/var/www/html` | A persistent volume, shared by NGINX and PHP-FPM | Per pod (or container), recreated from the image on every start |
+| WordPress, plugins, themes | Installed from the image on first boot, then managed in wp-admin: installs, updates and automatic updates work as usual | Only from the image: plugins and themes come from `composer.json`; no installs, file edits or automatic updates (`DISALLOW_FILE_MODS`, `AUTOMATIC_UPDATER_DISABLED`). Update by deploying a newer image |
+| Media uploads | In the volume, or offloaded | **Must be offloaded to object storage**: the local copy is lost with the pod and not shared between replicas |
+
+In stateful mode, `composer.json` only decides what a new site starts with: later changes to it, or a newer image, do not touch an existing volume. Keep WordPress, plugins and themes up to date from wp-admin.
+
+### Required plugin: Nginx Cache
+
+[Nginx Cache](https://wordpress.org/plugins/nginx-cache/) is bundled (via `composer.json`) and required in every environment: it purges the NGINX FastCGI cache when content changes. Activate it after installing WordPress; `NGINX_CACHE_PATH` is preconfigured. Without it, visitors keep getting cached pages until they expire (see [FastCGI cache](#fastcgi-cache)).
+
+### Media offloading
+
+Required in stateless mode, optional in stateful mode.
+
+- **Azure Blob Storage**: [Microsoft Azure Storage for WordPress](https://wordpress.org/plugins/windows-azure-storage/) is bundled. Configure it in wp-admin or with environment variables, which become the plugin's constants: `MICROSOFT_AZURE_ACCOUNT_NAME`, `MICROSOFT_AZURE_ACCOUNT_KEY`, `MICROSOFT_AZURE_CONTAINER`, `MICROSOFT_AZURE_USE_FOR_DEFAULT_UPLOAD=1`, and any other `MICROSOFT_AZURE_*`. Append `_FILE` to read a value from a file, e.g. `MICROSOFT_AZURE_ACCOUNT_KEY_FILE=/run/secrets/azure-key`.
+- **Amazon S3, Google Cloud Storage and others**: not bundled. Add an offloading plugin for your provider to `wordpress/composer.json` (from [WordPress Packagist](https://wpackagist.org/), e.g. `wpackagist-plugin/amazon-s3-and-cloudfront`), run `composer update` in `wordpress/` and build your own image. Configure it with its settings page or its constants through `WORDPRESS_CONFIG_EXTRA`.
 
 ## Configuration
 
@@ -73,13 +99,22 @@ kubectl apply -f https://raw.githubusercontent.com/gioamato/stateless-wordpress/
 - `WORDPRESS_DEBUG` (any non-empty value enables `WP_DEBUG`) and `WORDPRESS_CONFIG_EXTRA` (PHP code evaluated in `wp-config.php`)
 - Append `_FILE` to any of them to read the value from a file instead, e.g. `WORDPRESS_DB_PASSWORD_FILE=/run/secrets/db-password` for Docker or Kubernetes secrets.
 
-On top of the official template, `wp-config-stateless.php` disables file edits and automatic updates (WordPress, plugins and themes come from the image and are updated by redeploying), and turns media offloading settings into the constants the bundled plugins read:
+This image adds, in `wp-config-extra.php`:
 
-- [WP-Stateless](https://wordpress.org/plugins/wp-stateless/) (Google Cloud Storage): any `WP_STATELESS_MEDIA_*` variable, e.g. `WP_STATELESS_MEDIA_MODE=stateless`, `WP_STATELESS_MEDIA_BUCKET`, `WP_STATELESS_MEDIA_JSON_KEY`; the plugin also reads `GOOGLE_APPLICATION_CREDENTIALS` itself.
-- [Microsoft Azure Storage for WordPress](https://wordpress.org/plugins/windows-azure-storage/): any `MICROSOFT_AZURE_*` variable, e.g. `MICROSOFT_AZURE_ACCOUNT_NAME`, `MICROSOFT_AZURE_ACCOUNT_KEY`, `MICROSOFT_AZURE_CONTAINER`, `MICROSOFT_AZURE_USE_FOR_DEFAULT_UPLOAD=1`.
-- Append `_FILE` to read a value from a file, e.g. `MICROSOFT_AZURE_ACCOUNT_KEY_FILE=/run/secrets/azure-key`.
+- `WORDPRESS_STATELESS`: `1` (or `true`) switches on [stateless mode](#environments).
+- `MICROSOFT_AZURE_*` (and `*_FILE`) variables for [media offloading](#media-offloading).
+- `NGINX_CACHE_PATH` for the Nginx Cache plugin.
+
+On the NGINX container, `FASTCGI_CACHE_VALID` sets how long pages stay cached (see [FastCGI cache](#fastcgi-cache)).
 
 The `WP_DB_*` and `WP_*_KEY`/`WP_*_SALT` names used by earlier versions of this image still work when the matching `WORDPRESS_*` variable is unset, but are deprecated.
+
+## FastCGI cache
+
+NGINX caches pages for anonymous visitors for `FASTCGI_CACHE_VALID` (default `1h`) and the Nginx Cache plugin purges the cache when content changes. Each NGINX instance keeps its own cache:
+
+- With a single NGINX (e.g. Docker Compose), a purge clears the whole cache.
+- With several (e.g. one per Kubernetes pod), a purge only clears the instance that handled the request; the others keep serving their cached pages until they expire. The Kubernetes example sets `FASTCGI_CACHE_VALID=5m` to bound that; lower it if changes must show up faster, or put a shared cache (e.g. a CDN) in front.
 
 ## Testing
 

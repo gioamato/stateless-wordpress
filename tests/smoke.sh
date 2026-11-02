@@ -94,6 +94,8 @@ expect_eq "pm.max_children (FPM pool from PHP_FPM_MAX_CHILDREN)" 7 \
 	"$(compose exec -T wordpress php-fpm -tt 2>&1 | sed -n 's/.*pm\.max_children = //p' | tail -1)"
 if compose exec -T wordpress php-fpm -t >/dev/null 2>&1; then pass "php-fpm -t"; else fail "php-fpm -t"; fi
 if compose exec -T nginx nginx -t >/dev/null 2>&1; then pass "nginx -t"; else fail "nginx -t"; fi
+expect_line "NGINX cache lifetime (FASTCGI_CACHE_VALID)" "            fastcgi_cache_valid 200 302 2h;" \
+	"$(compose exec -T nginx nginx -T 2>/dev/null)"
 
 echo "# WordPress install through NGINX"
 install_body="$(curl -s -X POST "${BASE}/wp-admin/install.php?step=2" \
@@ -108,20 +110,24 @@ install_body="$(curl -s -X POST "${BASE}/wp-admin/install.php?step=2" \
 if grep -q 'Success!' <<<"$install_body"; then pass "install.php step 2"; else fail "install.php step 2 did not report success"; fi
 if wp core is-installed >/dev/null 2>&1; then pass "wp core is-installed"; else fail "wp core is-installed"; fi
 
-echo "# wp-config.php (official template with the stateless hooks)"
+echo "# wp-config.php (official template with this image's hooks)"
 # The web side reads WORDPRESS_DB_PASSWORD_FILE and the deprecated WP_DB_USER (neither default would connect):
 # the install above proves both
 expect_eq "MICROSOFT_AZURE_CONTAINER (offloading constant from an env variable)" smoke-container \
 	"$(wp eval 'echo MICROSOFT_AZURE_CONTAINER;')"
-expect_eq "WP_STATELESS_MEDIA_BUCKET (offloading constant from a *_FILE secret)" smoke-bucket \
-	"$(wp eval 'echo WP_STATELESS_MEDIA_BUCKET;')"
+expect_eq "MICROSOFT_AZURE_ACCOUNT_KEY (offloading constant from a *_FILE secret)" smoke-account-key \
+	"$(wp eval 'echo MICROSOFT_AZURE_ACCOUNT_KEY;')"
+# Default (stateful) mode: WordPress may install and update code; WORDPRESS_STATELESS=1 locks it to the image
+expect_eq "file mods and auto-updates (default)" "false false" \
+	"$(wp eval 'echo var_export(defined("DISALLOW_FILE_MODS") && DISALLOW_FILE_MODS, true), " ", var_export(defined("AUTOMATIC_UPDATER_DISABLED") && AUTOMATIC_UPDATER_DISABLED, true);')"
+expect_eq "file mods and auto-updates disabled (WORDPRESS_STATELESS=1)" "true true" \
+	"$(compose run --rm -T -e WORDPRESS_STATELESS=1 cli wp eval 'echo var_export(DISALLOW_FILE_MODS, true), " ", var_export(AUTOMATIC_UPDATER_DISABLED, true);')"
 
 echo "# Bundled plugins, theme and translations"
 plugins="$(wp plugin list --field=name)"
-for plugin in nginx-cache windows-azure-storage wp-stateless; do expect_line "plugins" "$plugin" "$plugins"; done
+for plugin in nginx-cache windows-azure-storage; do expect_line "plugins" "$plugin" "$plugins"; done
 expect_line "themes" twentytwentytwo "$(wp theme list --field=name)"
 if compose exec -T wordpress test -f /var/www/html/wp-content/languages/it_IT.mo; then pass "it_IT core translation"; else fail "it_IT core translation is missing"; fi
-expect_eq "DISALLOW_FILE_MODS" true "$(wp eval 'var_export(DISALLOW_FILE_MODS);')"
 if wp plugin activate --all >/dev/null; then pass "all plugins activate"; else fail "activating plugins"; fi
 
 echo "# Front end and FastCGI cache"
@@ -143,7 +149,7 @@ expect_header /wp-login.php X-Cache BYPASS
 echo "# Access rules"
 expect_status 403 /wp-config.php
 expect_status 403 /wp-config-docker.php
-expect_status 403 /wp-config-stateless.php
+expect_status 403 /wp-config-extra.php
 expect_status 403 /wp-config-sample.php
 expect_status 403 /.htaccess
 expect_status 403 /wp-content/uploads/shell.php

@@ -110,6 +110,11 @@ data:
   WORDPRESS_SECURE_AUTH_SALT: QyslXWNATGM3QXwoSnk3Z2FVKip1YF9JQ1gtaj9YO3pddjg1S148WCNePTxJSCArfS0rT1QkNzp7VSExa3gwVw==
   WORDPRESS_LOGGED_IN_SALT: a1hOdVlDZ0dVKHdDa19oUWxXREhzfT5SJUd+bERDTmchJSNKelJER2xoS2pkTyMoXU4lNl8mbD1+TD9MfDxpVw==
   WORDPRESS_NONCE_SALT: KFotMj94LiZBdXt9USN9Titiai0hUjYrN3VvcGRxJGItPGVnOiY+K3svJnErTC85b3lEd2I/XWIhfXAvXSxxYg==
+  # Media offloading to Azure Blob Storage (required with WORDPRESS_STATELESS, see the README), base64 values:
+  # MICROSOFT_AZURE_ACCOUNT_NAME: ...
+  # MICROSOFT_AZURE_ACCOUNT_KEY: ...
+  # MICROSOFT_AZURE_CONTAINER: ...
+  # MICROSOFT_AZURE_USE_FOR_DEFAULT_UPLOAD: MQ==
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -133,6 +138,11 @@ spec:
         envFrom:
         - secretRef:
             name: stateless-wordpress-env
+        env:
+        # The emptyDir below is lost with the pod: code comes only from the image, so no installs, file edits
+        # or automatic updates from wp-admin, and media must be offloaded (MICROSOFT_AZURE_* in the Secret)
+        - name: WORDPRESS_STATELESS
+          value: "1"
         ports:
         - containerPort: 9000
         readinessProbe:
@@ -156,6 +166,11 @@ spec:
       - name: nginx
         image: gioamato/stateless-wordpress:nginx-alpine
         imagePullPolicy: Always
+        env:
+        # Each pod has its own FastCGI cache and a purge only clears the pod that handled it,
+        # so keep pages short-lived to bound how stale the other replicas can get
+        - name: FASTCGI_CACHE_VALID
+          value: 5m
         ports:
         - containerPort: 80
         readinessProbe:

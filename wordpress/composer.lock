@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "600bf5c8a85d655ae211ec868a702ddb",
+    "content-hash": "370c300afc1a84cee455c2a70ec02ecb",
     "packages": [
         {
             "name": "composer/installers",
@@ -242,24 +242,6 @@
             },
             "type": "wordpress-plugin",
             "homepage": "https://wordpress.org/plugins/windows-azure-storage/"
-        },
-        {
-            "name": "wpackagist-plugin/wp-stateless",
-            "version": "3.1.0",
-            "source": {
-                "type": "svn",
-                "url": "https://plugins.svn.wordpress.org/wp-stateless/",
-                "reference": "tags/3.1.0"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://downloads.wordpress.org/plugin/wp-stateless.3.1.0.zip"
-            },
-            "require": {
-                "composer/installers": "^1.0 || ^2.0"
-            },
-            "type": "wordpress-plugin",
-            "homepage": "https://wordpress.org/plugins/wp-stateless/"
         },
         {
             "name": "wpackagist-theme/twentytwentytwo",
