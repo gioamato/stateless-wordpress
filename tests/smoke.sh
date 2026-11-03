@@ -133,7 +133,13 @@ expect_header / X-Cache MISS -H 'X-Forwarded-Proto: smoke-test'
 expect_header /wp-login.php X-Cache BYPASS
 
 echo "# Access rules"
-expect_status 403 /wp-config.php
+# Include-only PHP files never reach PHP (direct requests are fatal errors)
+for path in /wp-config.php /wp-config-sample.php /wp-settings.php /wp-admin/includes/admin.php \
+	/wp-includes/version.php /wp-includes/blocks/search.php; do
+	expect_status 403 "$path"
+done
+# The one wp-includes script the classic editor loads directly still reaches PHP
+expect_status 200 /wp-includes/js/tinymce/wp-tinymce.php
 expect_status 403 /.htaccess
 expect_status 403 /wp-content/uploads/shell.php
 expect_status 403 /wp-content/uploads/page.html
