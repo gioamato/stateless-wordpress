@@ -134,6 +134,13 @@ expect_header /wp-login.php X-Cache BYPASS
 
 echo "# Access rules"
 expect_status 403 /wp-config.php
+# Include-only PHP files (WordPress hardening guide, plus the setup files in the root)
+for path in /wp-admin/includes/admin.php /wp-includes/version.php /wp-includes/js/tinymce/langs/wp-langs-en.php \
+	/wp-includes/theme-compat/header.php /wp-config-sample.php /wp-settings.php; do
+	expect_status 403 "$path"
+done
+# Scripts in wp-includes subfolders other than those still reach PHP, like the classic editor's wp-tinymce.php
+expect_status 200 /wp-includes/js/tinymce/wp-tinymce.php
 expect_status 403 /.htaccess
 expect_status 403 /wp-content/uploads/shell.php
 expect_status 403 /wp-content/uploads/page.html
