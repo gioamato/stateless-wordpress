@@ -1,5 +1,5 @@
 # Build stage output is platform-independent, so run it natively on the build host
-FROM --platform=$BUILDPLATFORM composer:2.11.0 AS build
+FROM --platform=$BUILDPLATFORM composer:2.11.1 AS build
 WORKDIR /usr/src/app
 COPY composer.* ./
 RUN composer install --no-dev
