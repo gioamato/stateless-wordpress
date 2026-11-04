@@ -1,3 +1,7 @@
+# PHP version of the final image: one of the base-<version> stages below. Its default is the version
+# the floating wordpress-alpine tag follows. CI builds, tests and releases every base-<version> stage
+ARG PHP_VERSION=php8.3
+
 # Build stage output is platform-independent, so run it natively on the build host
 FROM --platform=$BUILDPLATFORM composer:2.11.1 AS build
 WORKDIR /usr/src/app
@@ -9,9 +13,18 @@ RUN for file in `ls ./themes/*.zip`; do unzip "${file}" -d "./wp-content/themes"
 COPY plugins ./plugins
 RUN for file in `ls ./plugins/*.zip`; do unzip "${file}" -d "./wp-content/plugins"; done
 
-# Tagged by PHP version: WordPress core is copied into the volume on first boot and then updates itself
-# (or, with WORDPRESS_STATELESS, is updated by deploying a newer image). Pinned by digest; Dependabot bumps it
-FROM wordpress:php8.3-fpm-alpine@sha256:82d93a279778e5307902813c402b9118521e8104459a0e350ed719f6d6c4d1ab
+# One base stage per supported PHP version, named base-<tag's PHP version>. Tagged by PHP version: WordPress
+# core is copied into the volume on first boot and then updates itself (or, with WORDPRESS_STATELESS, is updated
+# by deploying a newer image). Each is a FROM line pinned by digest, so Dependabot refreshes every digest;
+# BuildKit builds only the stage PHP_VERSION selects. To add a version, add its line here
+FROM wordpress:php8.2-fpm-alpine@sha256:6498fd5623c4f4085aea5c56a4b19bd5a69b4dd97923e71b0b72a27fb23a68cf AS base-php8.2
+FROM wordpress:php8.3-fpm-alpine@sha256:82d93a279778e5307902813c402b9118521e8104459a0e350ed719f6d6c4d1ab AS base-php8.3
+FROM wordpress:php8.4-fpm-alpine@sha256:d3dd20e58ada4d172fe6a580b31885d20f9514363ef8147ff9a48181ed4977d9 AS base-php8.4
+FROM wordpress:php8.5-fpm-alpine@sha256:58fc1e252c39e9c2939c4bc179cddb0ecbd583010dc46aafdd89cfee3f02ba03 AS base-php8.5
+
+# Everything below is shared by every PHP version
+# hadolint ignore=DL3006
+FROM base-${PHP_VERSION}
 
 # PHP defaults
 ENV PHP_MEMORY_LIMIT="128M"
@@ -31,8 +44,10 @@ ENV PHP_OPCACHE_MAX_ACCELERATED_FILES="10000"
 ENV PHP_OPCACHE_REVALIDATE_FREQUENCY="0"
 ENV PHP_OPCACHE_VALIDATE_TIMESTAMPS="0"
 
-# Install opcache and add the configuration file
-RUN docker-php-ext-install opcache
+# Install opcache unless the base already has it (the official image enables it, and PHP 8.5+ always builds
+# it in, so docker-php-ext-install fails there), and add the configuration file
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
+RUN php -m | grep -qxF 'Zend OPcache' || docker-php-ext-install opcache
 COPY opcache.ini "$PHP_INI_DIR/conf.d/opcache.ini"
 
 # PHP-FPM defaults

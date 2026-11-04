@@ -4,6 +4,8 @@ updates:
     directory: "/nginx/"
     schedule:
       interval: "daily"
+  # Covers every FROM line in wordpress/Dockerfile: the composer build stage and each base-php<version>
+  # stage (one wordpress dependency, so one PR refreshes the digests of every PHP version that has a new one)
   - package-ecosystem: "docker"
     directory: "/wordpress/"
     schedule:

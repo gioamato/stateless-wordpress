@@ -5,6 +5,7 @@
 #   tests/smoke.sh                     build both images with Docker Compose, then test them
 #   SMOKE_NO_BUILD=1 tests/smoke.sh    test already-built images ($WORDPRESS_IMAGE / $NGINX_IMAGE,
 #                                      default stateless-wordpress:{wordpress,nginx}-test)
+#   SMOKE_PHP_VERSION=php8.2 ...       also check that the WordPress image runs that PHP version
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -83,6 +84,11 @@ expect_status 200 /healthz
 if [ "$failures" -ne 0 ]; then
 	echo "Stack did not come up"
 	exit 1
+fi
+
+if [ -n "${SMOKE_PHP_VERSION:-}" ]; then
+	expect_eq "PHP version" "$SMOKE_PHP_VERSION" \
+		"$(compose exec -T wordpress php -r 'echo "php", PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION;')"
 fi
 
 echo "# Configuration from environment variables"

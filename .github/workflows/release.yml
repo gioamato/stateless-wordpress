@@ -8,7 +8,7 @@ on:
       - '.github/workflows/release.yml'
       - '.github/workflows/build-test.yml'
       - '.github/scripts/**'
-  # Manual runs publish both images (except any already released at this commit)
+  # Manual runs publish every build of both images (except any already released at this commit)
   workflow_dispatch:
 
 permissions:
@@ -29,7 +29,8 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      images: ${{ steps.diff.outputs.images }}
+      targets: ${{ steps.diff.outputs.targets }}
+      releases: ${{ steps.diff.outputs.releases }}
       versions: ${{ steps.diff.outputs.versions }}
     steps:
     - uses: actions/checkout@v7
@@ -47,61 +48,71 @@ jobs:
         fi
         echo "Last successful release: ${base:-none}"
 
-        images=()
-        versions='{}'
-        for image in wordpress nginx; do
-          # Version from the final FROM line's tag, up to its first "-":
-          # wordpress:php8.3-fpm-alpine@sha256:... -> php8.3, nginx:1.31.8-alpine -> 1.31.8
-          version="$(grep -E '^FROM ' "$image/Dockerfile" | tail -1 | sed -E 's/^FROM +[^ :]+:([^-@ ]+).*/\1/')"
-          [[ "$version" =~ ^(php)?[0-9]+(\.[0-9]+)*$ ]] || { echo "Could not read the version from $image/Dockerfile"; exit 1; }
-          versions="$(jq -c --arg image "$image" --arg version "$version" '. + {($image): $version}' <<<"$versions")"
+        # Every build of each image as {image, version, floating}: the WordPress image once per PHP version
+        # (wordpress/Dockerfile's base-<version> stages; the floating wordpress-alpine tag follows the
+        # default PHP_VERSION), NGINX once, its version from the final FROM line's tag up to its first "-"
+        # (nginx:1.31.8-alpine -> 1.31.8)
+        php="$(.github/scripts/php-versions.sh)"
+        builds="$(jq -c '.default as $default | [.versions[] | {image: "wordpress", version: ., floating: (. == $default)}]' <<<"$php")"
+        nginx_version="$(grep -E '^FROM ' nginx/Dockerfile | tail -1 | sed -E 's/^FROM +[^ :]+:([^-@ ]+).*/\1/')"
+        [[ "$nginx_version" =~ ^[0-9]+(\.[0-9]+)*$ ]] || { echo "Could not read the version from nginx/Dockerfile"; exit 1; }
+        builds="$(jq -c --arg version "$nginx_version" '. + [{image: "nginx", version: $version, floating: true}]' <<<"$builds")"
+        echo "versions=$builds" >> "$GITHUB_OUTPUT"
 
+        releases='[]'
+        while read -r build; do
+          image="$(jq -r .image <<<"$build")"
+          version="$(jq -r .version <<<"$build")"
           # No base (manual run, first release) publishes everything; git diff --quiet exits 1
           # on changes, and any error (e.g. history rewritten since base) also counts as changed
           if [ -n "$base" ] && git diff --quiet "$base" "$GITHUB_SHA" -- "$image/"; then
             continue
           fi
-          # A commit is released once: its <image>-<version>-alpine-<sha7> tag is never overwritten
+          # A commit is released once per build: its <image>-<version>-alpine-<sha7> tag is never overwritten
           status=0
           .github/scripts/image-tag-exists.sh "$REPOSITORY:$image-$version-alpine-${GITHUB_SHA::7}" || status=$?
           case "$status" in
-            0) echo "$image is already released at ${GITHUB_SHA::7}, skipping" ;;
-            1) images+=("$image") ;;
+            0) echo "$image $version is already released at ${GITHUB_SHA::7}, skipping" ;;
+            1) releases="$(jq -c --argjson build "$build" '. + [$build]' <<<"$releases")" ;;
             *) exit 1 ;;
           esac
-        done
-        json="$(jq -nc '$ARGS.positional' --args "${images[@]}")"
-        echo "Images to release: $json"
-        echo "images=$json" >> "$GITHUB_OUTPUT"
-        echo "versions=$versions" >> "$GITHUB_OUTPUT"
+        done < <(jq -c '.[]' <<<"$builds")
+
+        # Build targets for build-test.yml: wordpress-<PHP version> or nginx
+        targets="$(jq -c 'map(if .image == "wordpress" then "wordpress-" + .version else .image end)' <<<"$releases")"
+        echo "To release: $releases"
+        echo "releases=$releases" >> "$GITHUB_OUTPUT"
+        echo "targets=$targets" >> "$GITHUB_OUTPUT"
 
   build:
     needs: changes
-    if: needs.changes.outputs.images != '[]'
+    if: needs.changes.outputs.releases != '[]'
     uses: ./.github/workflows/build-test.yml
     with:
       push: true
-      images: ${{ needs.changes.outputs.images }}
+      targets: ${{ needs.changes.outputs.targets }}
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
-  # Runs only when both architectures passed: combine their digests and move the tags
+  # Runs only when every build passed on both architectures: combine each build's digests and move its tags
   publish:
     needs: [changes, build]
     # Evaluated before the matrix, which can't be empty
-    if: needs.changes.outputs.images != '[]'
+    if: needs.changes.outputs.releases != '[]'
+    name: publish (${{ matrix.release.image }} ${{ matrix.release.version }})
     strategy:
       fail-fast: false
       matrix:
-        image: ${{ fromJSON(needs.changes.outputs.images) }}
+        release: ${{ fromJSON(needs.changes.outputs.releases) }}
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
 
+    # build-test.yml uploads digests-wordpress-<PHP version>-<arch> and digests-nginx-<arch>
     - uses: actions/download-artifact@v8
       with:
-        pattern: digests-${{ matrix.image }}-*
+        pattern: digests-${{ matrix.release.image == 'wordpress' && format('wordpress-{0}', matrix.release.version) || matrix.release.image }}-*
         merge-multiple: true
         path: ${{ runner.temp }}/digests
 
@@ -113,30 +124,30 @@ jobs:
 
     - name: Create multi-arch tags
       env:
-        IMAGE: ${{ matrix.image }}
-        VERSION: ${{ fromJSON(needs.changes.outputs.versions)[matrix.image] }}
+        IMAGE: ${{ matrix.release.image }}
+        VERSION: ${{ matrix.release.version }}
+        FLOATING: ${{ matrix.release.floating }}
       run: |
         digests=("$RUNNER_TEMP"/digests/*)
         [ "${#digests[@]}" -eq 2 ] || { echo "Expected 2 digests (amd64, arm64), got ${#digests[@]}"; exit 1; }
 
-        tags=(
-          "$IMAGE-alpine"
-          "$IMAGE-$VERSION-alpine"
-          "$IMAGE-$VERSION-alpine-${GITHUB_SHA::7}"
-        )
+        sha_tag="$IMAGE-$VERSION-alpine-${GITHUB_SHA::7}"
+        tags=("$sha_tag" "$IMAGE-$VERSION-alpine")
+        # <image>-alpine follows one build: NGINX, and the WordPress image on the default PHP version
+        if [ "$FLOATING" = true ]; then tags+=("$IMAGE-alpine"); fi
         # Checked again here, so a registry hiccup in the changes job can't lead to an overwrite
         status=0
-        .github/scripts/image-tag-exists.sh "$REPOSITORY:${tags[2]}" || status=$?
-        [ "$status" -eq 1 ] || { echo "$REPOSITORY:${tags[2]} already exists or could not be checked; not overwriting it"; exit 1; }
+        .github/scripts/image-tag-exists.sh "$REPOSITORY:$sha_tag" || status=$?
+        [ "$status" -eq 1 ] || { echo "$REPOSITORY:$sha_tag already exists or could not be checked; not overwriting it"; exit 1; }
 
         args=()
         for tag in "${tags[@]}"; do args+=(-t "$REPOSITORY:$tag"); done
         for digest in "${digests[@]}"; do args+=("$REPOSITORY@sha256:$(basename "$digest")"); done
         docker buildx imagetools create "${args[@]}"
 
-        digest="$(docker buildx imagetools inspect "$REPOSITORY:${tags[2]}" --format '{{json .Manifest}}' | jq -r .digest)"
+        digest="$(docker buildx imagetools inspect "$REPOSITORY:$sha_tag" --format '{{json .Manifest}}' | jq -r .digest)"
         {
-          echo "### $IMAGE"
+          echo "### $IMAGE $VERSION"
           echo
           echo "Pin (multi-arch index digest):"
           echo
@@ -148,10 +159,10 @@ jobs:
           for tag in "${tags[@]}"; do echo "- \`$REPOSITORY:$tag\`"; done
         } >> "$GITHUB_STEP_SUMMARY"
 
-  # One GitHub release per released commit, listing the digest pin of each image released at it
+  # One GitHub release per released commit, listing the digest pin of each build released at it
   github-release:
     needs: [changes, publish]
-    if: needs.changes.outputs.images != '[]'
+    if: needs.changes.outputs.releases != '[]'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -162,12 +173,15 @@ jobs:
         VERSIONS: ${{ needs.changes.outputs.versions }}
       run: |
         sha7="${GITHUB_SHA::7}"
-        title_parts=()
+        # Title lists each image once with its versions, e.g. "wordpress php8.2/php8.3, nginx 1.31.8"
+        declare -A title_versions=()
+        title_images=()
         notes="Built from ${GITHUB_SHA}, smoke-tested on linux/amd64 and linux/arm64 before tagging."$'\n'
         notes+=$'\n'"Pin these in production: the digest guarantees the exact image, the tag keeps it readable."$'\n'
-        # Every image released at this commit, including one a previous run released before failing
-        for image in wordpress nginx; do
-          version="$(jq -r --arg image "$image" '.[$image]' <<<"$VERSIONS")"
+        # Every build released at this commit, including one a previous run released before failing
+        while read -r build; do
+          image="$(jq -r .image <<<"$build")"
+          version="$(jq -r .version <<<"$build")"
           ref="$REPOSITORY:$image-$version-alpine-$sha7"
           status=0
           .github/scripts/image-tag-exists.sh "$ref" || status=$?
@@ -177,13 +191,18 @@ jobs:
             *) exit 1 ;;
           esac
           digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | jq -r .digest)"
-          title_parts+=("$image $version")
+          tags="\`$image-$version-alpine\`, \`$image-$version-alpine-$sha7\`"
+          if [ "$(jq -r .floating <<<"$build")" = true ]; then tags="\`$image-alpine\`, $tags"; fi
+          [ -n "${title_versions[$image]:-}" ] || title_images+=("$image")
+          title_versions[$image]="${title_versions[$image]:+${title_versions[$image]}/}$version"
           notes+=$'\n'"## $image $version"$'\n\n'
           notes+='```'$'\n'"$REPOSITORY:$image-$version-alpine@$digest"$'\n''```'$'\n\n'
-          notes+="Tags: \`$image-alpine\`, \`$image-$version-alpine\`, \`$image-$version-alpine-$sha7\`"$'\n'
-        done
-        [ "${#title_parts[@]}" -gt 0 ] || { echo "No image tags found for $sha7"; exit 1; }
+          notes+="Tags: $tags"$'\n'
+        done < <(jq -c '.[]' <<<"$VERSIONS")
+        [ "${#title_images[@]}" -gt 0 ] || { echo "No image tags found for $sha7"; exit 1; }
 
+        title_parts=()
+        for image in "${title_images[@]}"; do title_parts+=("$image ${title_versions[$image]}"); done
         joined="$(IFS=,; echo "${title_parts[*]}")"
         title="${joined//,/, } ($sha7)"
         tag="release-$sha7"

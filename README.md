@@ -12,17 +12,26 @@ Images are published as multi-arch manifests for `linux/amd64` and `linux/arm64`
 
 ## Image Tags
 
-Each image is published under three tags on [Docker Hub](https://hub.docker.com/r/gioamato/stateless-wordpress/tags):
+The WordPress image is built for several PHP versions, each published as its own set of tags on [Docker Hub](https://hub.docker.com/r/gioamato/stateless-wordpress/tags):
+
+| PHP | Tags |
+|---|---|
+| 8.2 | `wordpress-php8.2-alpine`, `wordpress-php8.2-alpine-<commit>` |
+| 8.3 (default) | `wordpress-php8.3-alpine`, `wordpress-php8.3-alpine-<commit>`, `wordpress-alpine` |
+| 8.4 | `wordpress-php8.4-alpine`, `wordpress-php8.4-alpine-<commit>` |
+| 8.5 | `wordpress-php8.5-alpine`, `wordpress-php8.5-alpine-<commit>` |
 
 | Tag | Example | Moves when |
 |---|---|---|
-| `<image>-alpine` | `wordpress-alpine` | every release |
+| `<image>-alpine` | `wordpress-alpine`, `nginx-alpine` | every release; for WordPress, of the default PHP version only |
 | `<image>-<version>-alpine` | `wordpress-php8.3-alpine`, `nginx-1.31.8-alpine` | every release on that PHP (WordPress) or NGINX version |
-| `<image>-<version>-alpine-<commit>` | `wordpress-php8.3-alpine-dee6de0` | never: each commit is released once, so use it to roll back to a known build |
+| `<image>-<version>-alpine-<commit>` | `wordpress-php8.3-alpine-dee6de0` | never: each commit is released once per version, so use it to roll back to a known build |
 
-The WordPress image is tagged by PHP version, like the official image's `php8.3-fpm-alpine`: WordPress itself is copied in on first boot and then kept up to date by its own updater (see [Environments](#environments)).
+The WordPress image is tagged by PHP version, like the official image's `php8.3-fpm-alpine`: WordPress itself is copied in on first boot and then kept up to date by its own updater (see [Environments](#environments)). Pick the PHP version explicitly with `wordpress-php<version>-alpine`; `wordpress-alpine` follows the default PHP version (currently 8.3), so it jumps to a newer PHP when the default changes.
 
-A release is published only after both architectures pass the smoke test (see [Testing](#testing)), and only for the images whose directory changed.
+Every PHP version is built from the same [`wordpress/Dockerfile`](wordpress/Dockerfile): it has one pinned `base-php<version>` stage per version, and the `PHP_VERSION` build argument picks one (`docker build --build-arg PHP_VERSION=php8.5 ./wordpress`). Its default is the default PHP version. Adding a version is one `FROM` line there; CI and releases pick it up from the Dockerfile.
+
+A release is published only after every PHP version passes the smoke test on both architectures (see [Testing](#testing)), and only for the images whose directory changed.
 
 ### Pinning in production
 
@@ -156,6 +165,14 @@ tests/lint.sh
 # env-based PHP/FPM config, WordPress install, bundled plugins and theme, cache purging,
 # FastCGI cache, NGINX access rules and clean PHP/NGINX logs
 tests/smoke.sh
+```
+
+`tests/smoke.sh` builds the default PHP version. CI runs it for every PHP version on amd64 and arm64; to test one version locally, build the images first:
+
+```bash
+docker build --build-arg PHP_VERSION=php8.5 -t stateless-wordpress:wordpress-test ./wordpress
+docker build -t stateless-wordpress:nginx-test ./nginx
+SMOKE_NO_BUILD=1 SMOKE_PHP_VERSION=php8.5 tests/smoke.sh
 ```
 
 The smoke test uses its own Compose project and port (`SMOKE_PORT`, default `8089`), so it can run next to the local development stack.

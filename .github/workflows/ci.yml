@@ -18,7 +18,7 @@ jobs:
     - uses: actions/checkout@v7
     - run: tests/lint.sh
 
-  # Same build and smoke test that release.yml runs before pushing
+  # Same build and smoke test that release.yml runs before pushing: every PHP version, amd64 and arm64
   smoke:
     uses: ./.github/workflows/build-test.yml
 

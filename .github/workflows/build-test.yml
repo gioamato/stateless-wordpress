@@ -1,15 +1,16 @@
 name: Build and test
-# Builds both images natively on each architecture and smoke-tests them together.
-# With push, the images listed in `images` are then pushed by digest (untagged);
-# release.yml tags them only once every architecture has passed.
+# Builds both images natively on each architecture, the WordPress image once per PHP version
+# (the base-<version> stages of wordpress/Dockerfile), and smoke-tests each build with NGINX.
+# With push, the targets listed in `targets` are then pushed by digest (untagged);
+# release.yml tags them only once every build has passed.
 on:
   workflow_call:
     inputs:
       push:
         type: boolean
         default: false
-      images:
-        description: JSON list of the images to push, e.g. ["wordpress","nginx"]
+      targets:
+        description: JSON list of the builds to push, e.g. ["wordpress-php8.2","wordpress-php8.3","nginx"]
         type: string
         default: "[]"
     secrets:
@@ -22,17 +23,38 @@ env:
   REPOSITORY: docker.io/gioamato/stateless-wordpress
 
 jobs:
+  php:
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.read.outputs.versions }}
+      default: ${{ steps.read.outputs.default }}
+    steps:
+    - uses: actions/checkout@v7
+    - id: read
+      run: |
+        json="$(.github/scripts/php-versions.sh)"
+        echo "PHP versions: $json"
+        echo "versions=$(jq -c .versions <<<"$json")" >> "$GITHUB_OUTPUT"
+        echo "default=$(jq -r .default <<<"$json")" >> "$GITHUB_OUTPUT"
+
   smoke:
-    name: smoke (${{ matrix.arch }})
+    name: smoke (${{ matrix.php }}, ${{ matrix.arch }})
+    needs: php
     strategy:
       fail-fast: false
       matrix:
+        php: ${{ fromJSON(needs.php.outputs.versions) }}
+        arch: [ amd64, arm64 ]
         include:
         - arch: amd64
           runner: ubuntu-latest
         - arch: arm64
           runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
+    env:
+      # NGINX doesn't depend on PHP: only the default version's build of it is pushed
+      PUSH_WORDPRESS: ${{ inputs.push && contains(fromJSON(inputs.targets), format('wordpress-{0}', matrix.php)) }}
+      PUSH_NGINX: ${{ inputs.push && contains(fromJSON(inputs.targets), 'nginx') && matrix.php == needs.php.outputs.default }}
     steps:
     - uses: actions/checkout@v7
     - uses: docker/setup-buildx-action@v4.4.1
@@ -41,10 +63,11 @@ jobs:
       with:
         context: ./wordpress
         platforms: linux/${{ matrix.arch }}
+        build-args: PHP_VERSION=${{ matrix.php }}
         load: true
         tags: stateless-wordpress:wordpress-test
-        cache-from: type=gha,scope=wordpress-${{ matrix.arch }}
-        cache-to: type=gha,mode=max,scope=wordpress-${{ matrix.arch }}
+        cache-from: type=gha,scope=wordpress-${{ matrix.php }}-${{ matrix.arch }}
+        cache-to: type=gha,mode=max,scope=wordpress-${{ matrix.php }}-${{ matrix.arch }}
 
     - uses: docker/build-push-action@v7.4.0
       with:
@@ -53,30 +76,33 @@ jobs:
         load: true
         tags: stateless-wordpress:nginx-test
         cache-from: type=gha,scope=nginx-${{ matrix.arch }}
-        cache-to: type=gha,mode=max,scope=nginx-${{ matrix.arch }}
+        # Every PHP version builds the same NGINX image; only the default version's job writes its cache
+        cache-to: ${{ matrix.php == needs.php.outputs.default && format('type=gha,mode=max,scope=nginx-{0}', matrix.arch) || '' }}
 
     - run: tests/smoke.sh
       env:
         SMOKE_NO_BUILD: "1"
+        SMOKE_PHP_VERSION: ${{ matrix.php }}
 
     # The push builds below reuse the builder's cache from the tested builds above
-    - if: inputs.push
+    - if: env.PUSH_WORDPRESS == 'true' || env.PUSH_NGINX == 'true'
       uses: docker/login-action@v4.7.0
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
     - id: push-wordpress
-      if: inputs.push && contains(fromJSON(inputs.images), 'wordpress')
+      if: env.PUSH_WORDPRESS == 'true'
       uses: docker/build-push-action@v7.4.0
       with:
         context: ./wordpress
         platforms: linux/${{ matrix.arch }}
+        build-args: PHP_VERSION=${{ matrix.php }}
         outputs: type=image,name=${{ env.REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
-        cache-from: type=gha,scope=wordpress-${{ matrix.arch }}
+        cache-from: type=gha,scope=wordpress-${{ matrix.php }}-${{ matrix.arch }}
 
     - id: push-nginx
-      if: inputs.push && contains(fromJSON(inputs.images), 'nginx')
+      if: env.PUSH_NGINX == 'true'
       uses: docker/build-push-action@v7.4.0
       with:
         context: ./nginx
@@ -85,7 +111,7 @@ jobs:
         cache-from: type=gha,scope=nginx-${{ matrix.arch }}
 
     - name: Export digests
-      if: inputs.push
+      if: env.PUSH_WORDPRESS == 'true' || env.PUSH_NGINX == 'true'
       env:
         WORDPRESS_DIGEST: ${{ steps.push-wordpress.outputs.digest }}
         NGINX_DIGEST: ${{ steps.push-nginx.outputs.digest }}
@@ -97,15 +123,15 @@ jobs:
           if [ -n "$digest" ]; then touch "$RUNNER_TEMP/digests/$image/${digest#sha256:}"; fi
         done
 
-    - if: inputs.push && contains(fromJSON(inputs.images), 'wordpress')
+    - if: env.PUSH_WORDPRESS == 'true'
       uses: actions/upload-artifact@v7
       with:
-        name: digests-wordpress-${{ matrix.arch }}
+        name: digests-wordpress-${{ matrix.php }}-${{ matrix.arch }}
         path: ${{ runner.temp }}/digests/wordpress/*
         if-no-files-found: error
         retention-days: 1
 
-    - if: inputs.push && contains(fromJSON(inputs.images), 'nginx')
+    - if: env.PUSH_NGINX == 'true'
       uses: actions/upload-artifact@v7
       with:
         name: digests-nginx-${{ matrix.arch }}
