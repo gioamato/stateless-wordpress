@@ -158,11 +158,15 @@ expect_eq "file mods and auto-updates (default)" "false false" \
 expect_eq "file mods and auto-updates disabled (WORDPRESS_STATELESS=1)" "true true" \
 	"$(compose run --rm -T -e WORDPRESS_STATELESS=1 cli wp eval 'echo var_export(DISALLOW_FILE_MODS, true), " ", var_export(AUTOMATIC_UPDATER_DISABLED, true);')"
 
-echo "# Bundled plugins, theme and translations"
-plugins="$(wp plugin list --field=name)"
-for plugin in nginx-cache windows-azure-storage; do expect_line "plugins" "$plugin" "$plugins"; done
-expect_line "themes" twentytwentytwo "$(wp theme list --field=name)"
-if compose exec -T wordpress test -f /var/www/html/wp-content/languages/it_IT.mo; then pass "it_IT core translation"; else fail "it_IT core translation is missing"; fi
+echo "# Bundled plugins, theme and language"
+# Nginx Cache is a must-use plugin: loaded without activation, with its settings pinned to the constants
+expect_line "must-use plugins" stateless-wordpress-nginx-cache "$(wp plugin list --status=must-use --field=name)"
+expect_eq "Nginx Cache loaded" yes "$(wp eval 'echo class_exists("NginxCache") ? "yes" : "no";')"
+expect_eq "nginx_cache_path (NGINX_CACHE_PATH)" /var/www/html/cache "$(wp option get nginx_cache_path)"
+expect_eq "nginx_auto_purge (NGINX_AUTO_PURGE)" 1 "$(wp option get nginx_auto_purge)"
+expect_line "plugins" windows-azure-storage "$(wp plugin list --field=name)"
+expect_eq "active theme" twentytwentyfive "$(wp theme list --status=active --field=name)"
+expect_eq "locale" en_US "$(wp eval 'echo get_locale();')"
 if wp plugin activate --all >/dev/null; then pass "all plugins activate"; else fail "activating plugins"; fi
 
 echo "# Front end and FastCGI cache"
@@ -180,6 +184,11 @@ expect_header / X-Cache HIT
 # to HTTPS for a direct plain-HTTP request) is never served to requests that came in another way
 expect_header / X-Cache MISS -H 'X-Forwarded-Proto: smoke-test'
 expect_header /wp-login.php X-Cache BYPASS
+# Publishing content purges the cache through the Nginx Cache plugin, so the next visit is served fresh
+curl -s -o /dev/null "${BASE}/"
+expect_header / X-Cache HIT
+wp post create --post_status=publish --post_title="Cache purge check" >/dev/null
+expect_header / X-Cache MISS
 
 echo "# Access rules"
 expect_status 403 /wp-config.php

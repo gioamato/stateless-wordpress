@@ -3,33 +3,29 @@
   "description": "Stateless WordPress (K8s Ready)",
   "repositories": [
     {
-      "type":"composer",
-      "url":"https://wpackagist.org",
-      "only": ["wpackagist-plugin/*", "wpackagist-theme/*"]
+      "type": "composer",
+      "url": "https://wpackagist.org",
+      "only": [
+        "wpackagist-plugin/*",
+        "wpackagist-theme/*"
+      ]
     }
   ],
   "config": {
     "sort-packages": true,
     "allow-plugins": {
-      "composer/installers": true,
-      "inpsyde/wp-translation-downloader": true
+      "composer/installers": true
     }
   },
   "require": {
-    "inpsyde/wp-translation-downloader": "^2.0",
     "wpackagist-plugin/nginx-cache": "1.0.8",
-    "wpackagist-plugin/windows-azure-storage": "4.3.2",
-    "wpackagist-theme/twentytwentytwo": "1.1"
+    "wpackagist-plugin/windows-azure-storage": "4.5.2",
+    "wpackagist-theme/twentytwentyfive": "1.5"
   },
   "extra": {
-    "wp-translation-downloader": {
-      "languages": [ "it_IT" ],
-      "languageRootDir": "wp-content/languages",
-      "virtual-packages": [
-        {
-          "name": "johnpbloch/wordpress",
-          "type": "wordpress-core"
-        }
+    "installer-paths": {
+      "wp-content/mu-plugins/{$name}/": [
+        "wpackagist-plugin/nginx-cache"
       ]
     }
   }

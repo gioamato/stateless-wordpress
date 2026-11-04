@@ -81,7 +81,9 @@ In stateful mode, `composer.json` only decides what a new site starts with: late
 
 ### Required plugin: Nginx Cache
 
-[Nginx Cache](https://wordpress.org/plugins/nginx-cache/) is bundled (via `composer.json`) and required in every environment: it purges the NGINX FastCGI cache when content changes. Activate it after installing WordPress; `NGINX_CACHE_PATH` is preconfigured. Without it, visitors keep getting cached pages until they expire (see [FastCGI cache](#fastcgi-cache)).
+NGINX always caches pages in this image, and [Nginx Cache](https://wordpress.org/plugins/nginx-cache/) is what purges that cache when content changes, so it is installed as a **must-use plugin**: it is active from the first boot and can't be deactivated or deleted from wp-admin. Its cache path and automatic purging are pinned to `NGINX_CACHE_PATH` (default `/var/www/html/cache`, where NGINX writes) and `NGINX_AUTO_PURGE` (default `1`); override them with `WORDPRESS_CONFIG_EXTRA`. The version comes from `composer.json` (installed into `wp-content/mu-plugins/nginx-cache/` and loaded by `mu-plugins/stateless-wordpress-nginx-cache.php`).
+
+A new site starts with English (`en_US`), the [Twenty Twenty-Five](https://wordpress.org/themes/twentytwentyfive/) theme, Nginx Cache and the Azure offloading plugin. Like all of WordPress, they are copied into `/var/www/html` only when it is empty: an existing volume keeps its own plugins, themes and languages.
 
 ### Media offloading
 
@@ -103,7 +105,7 @@ This image adds, in `wp-config-extra.php`:
 
 - `WORDPRESS_STATELESS`: `1` (or `true`) switches on [stateless mode](#environments).
 - `MICROSOFT_AZURE_*` (and `*_FILE`) variables for [media offloading](#media-offloading).
-- `NGINX_CACHE_PATH` for the Nginx Cache plugin.
+- `NGINX_CACHE_PATH` and `NGINX_AUTO_PURGE` for the [Nginx Cache plugin](#required-plugin-nginx-cache).
 
 On the NGINX container, `FASTCGI_CACHE_VALID` sets how long pages stay cached (see [FastCGI cache](#fastcgi-cache)).
 
@@ -151,7 +153,7 @@ Every pull request runs the same checks you can run locally (only Docker is requ
 tests/lint.sh
 
 # Build both images, start the stack and test it end to end:
-# env-based PHP/FPM config, WordPress install, bundled plugins/theme/translations,
+# env-based PHP/FPM config, WordPress install, bundled plugins and theme, cache purging,
 # FastCGI cache, NGINX access rules and clean PHP/NGINX logs
 tests/smoke.sh
 ```

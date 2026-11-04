@@ -4,8 +4,10 @@
  * (see build-wp-config.sh). WORDPRESS_CONFIG_EXTRA runs first, so it can override any of these.
  */
 
-// Nginx Cache plugin (bundled and required in every environment): purges the FastCGI cache NGINX writes here
+// Nginx Cache plugin (a must-use plugin in this image, see mu-plugins/stateless-wordpress-nginx-cache.php): purges
+// the FastCGI cache NGINX writes here whenever content changes
 defined( 'NGINX_CACHE_PATH' ) || define( 'NGINX_CACHE_PATH', '/var/www/html/cache' );
+defined( 'NGINX_AUTO_PURGE' ) || define( 'NGINX_AUTO_PURGE', 1 );
 
 // WORDPRESS_STATELESS=1: for environments without persistent storage for /var/www/html (e.g. Kubernetes with
 // an emptyDir), where the image is the only source of code. No installs or file edits from wp-admin and no
