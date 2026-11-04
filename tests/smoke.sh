@@ -88,10 +88,45 @@ fi
 echo "# Configuration from environment variables"
 expect_eq "memory_limit (php.ini from PHP_MEMORY_LIMIT)" 192M \
 	"$(compose exec -T wordpress php -r 'echo ini_get("memory_limit");')"
-expect_eq "opcache.enable (opcache.ini from PHP_OPCACHE_ENABLE)" 1 \
-	"$(compose exec -T wordpress php -r 'echo ini_get("opcache.enable");')"
 expect_eq "pm.max_children (FPM pool from PHP_FPM_MAX_CHILDREN)" 7 \
 	"$(compose exec -T wordpress php-fpm -tt 2>&1 | sed -n 's/.*pm\.max_children = //p' | tail -1)"
+# Every php.ini and opcache.ini directive reads a variable: each one gets a non-default value in a one-off
+# php process (get_cfg_var shows the value from the file, before any runtime change)
+for setting in \
+	PHP_MEMORY_LIMIT=256M:memory_limit \
+	PHP_UPLOAD_MAX_FILESIZE=64M:upload_max_filesize \
+	PHP_POST_MAX_SIZE=72M:post_max_size \
+	PHP_MAX_INPUT_VARS=2000:max_input_vars \
+	PHP_OPCACHE_ENABLE=0:opcache.enable \
+	PHP_OPCACHE_MEMORY_CONSUMPTION=96:opcache.memory_consumption \
+	PHP_OPCACHE_MAX_ACCELERATED_FILES=5000:opcache.max_accelerated_files \
+	PHP_OPCACHE_REVALIDATE_FREQUENCY=5:opcache.revalidate_freq \
+	PHP_OPCACHE_VALIDATE_TIMESTAMPS=1:opcache.validate_timestamps; do
+	variable="${setting%%=*}" value="${setting#*=}" directive="${setting##*:}"
+	value="${value%%:*}"
+	expect_eq "$directive ($variable)" "$value" \
+		"$(compose exec -T -e "$variable=$value" wordpress php -r "echo get_cfg_var('$directive');")"
+done
+# The CLI forces max_execution_time (0) and max_input_time (-1) over any ini file, so read those two the way
+# PHP parses the image's php.ini instead
+for setting in PHP_MAX_EXECUTION_TIME=90:max_execution_time PHP_MAX_INPUT_TIME=30:max_input_time; do
+	variable="${setting%%=*}" value="${setting#*=}" directive="${setting##*:}"
+	value="${value%%:*}"
+	expect_eq "$directive ($variable)" "$value" \
+		"$(compose exec -T -e "$variable=$value" wordpress \
+			php -r "echo parse_ini_file(getenv('PHP_INI_DIR') . '/conf.d/php.ini')['$directive'];")"
+done
+# Same for the FPM pool, in one php-fpm -tt run (the running pool is not touched)
+fpm_config="$(compose exec -T -e PHP_FPM_PM=static -e PHP_FPM_MAX_CHILDREN=9 -e PHP_FPM_START_SERVERS=3 \
+	-e PHP_FPM_MIN_SPARE_SERVERS=2 -e PHP_FPM_MAX_SPARE_SERVERS=4 -e PHP_FPM_MAX_REQUESTS=500 wordpress php-fpm -tt 2>&1)"
+for setting in PHP_FPM_PM=static:pm PHP_FPM_MAX_CHILDREN=9:pm.max_children PHP_FPM_START_SERVERS=3:pm.start_servers \
+	PHP_FPM_MIN_SPARE_SERVERS=2:pm.min_spare_servers PHP_FPM_MAX_SPARE_SERVERS=4:pm.max_spare_servers \
+	PHP_FPM_MAX_REQUESTS=500:pm.max_requests; do
+	variable="${setting%%=*}" value="${setting#*=}" directive="${setting##*:}"
+	value="${value%%:*}"
+	expect_eq "$directive ($variable)" "$value" \
+		"$(sed -n "s/.*[[:space:]]${directive//./\\.} = //p" <<<"$fpm_config" | tail -1)"
+done
 if compose exec -T wordpress php-fpm -t >/dev/null 2>&1; then pass "php-fpm -t"; else fail "php-fpm -t"; fi
 if compose exec -T nginx nginx -t >/dev/null 2>&1; then pass "nginx -t"; else fail "nginx -t"; fi
 expect_line "NGINX cache lifetime (FASTCGI_CACHE_VALID)" "            fastcgi_cache_valid 200 302 2h;" \

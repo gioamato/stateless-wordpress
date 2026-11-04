@@ -107,6 +107,32 @@ This image adds, in `wp-config-extra.php`:
 
 On the NGINX container, `FASTCGI_CACHE_VALID` sets how long pages stay cached (see [FastCGI cache](#fastcgi-cache)).
 
+### PHP, OPcache and PHP-FPM
+
+Every setting in the image's `php.ini`, `opcache.ini` and FPM pool (`php-fpm.conf`) comes from a variable on the WordPress container:
+
+| Variable | Directive | Default |
+|---|---|---|
+| `PHP_MEMORY_LIMIT` | `memory_limit` | `128M` |
+| `PHP_UPLOAD_MAX_FILESIZE` | `upload_max_filesize` | `50M` |
+| `PHP_POST_MAX_SIZE` | `post_max_size` | `50M` |
+| `PHP_MAX_EXECUTION_TIME` | `max_execution_time` | `60` |
+| `PHP_MAX_INPUT_TIME` | `max_input_time` | `-1` |
+| `PHP_MAX_INPUT_VARS` | `max_input_vars` | `1000` |
+| `PHP_OPCACHE_ENABLE` | `opcache.enable` | `1` |
+| `PHP_OPCACHE_MEMORY_CONSUMPTION` | `opcache.memory_consumption` | `128` |
+| `PHP_OPCACHE_MAX_ACCELERATED_FILES` | `opcache.max_accelerated_files` | `10000` |
+| `PHP_OPCACHE_REVALIDATE_FREQUENCY` | `opcache.revalidate_freq` | `0` |
+| `PHP_OPCACHE_VALIDATE_TIMESTAMPS` | `opcache.validate_timestamps` | `0` |
+| `PHP_FPM_PM` | `pm` | `dynamic` |
+| `PHP_FPM_MAX_CHILDREN` | `pm.max_children` | `5` |
+| `PHP_FPM_START_SERVERS` | `pm.start_servers` | `2` |
+| `PHP_FPM_MIN_SPARE_SERVERS` | `pm.min_spare_servers` | `1` |
+| `PHP_FPM_MAX_SPARE_SERVERS` | `pm.max_spare_servers` | `2` |
+| `PHP_FPM_MAX_REQUESTS` | `pm.max_requests` | `1000` |
+
+With `PHP_OPCACHE_VALIDATE_TIMESTAMPS=0`, PHP doesn't notice changed files on its own: WordPress clears OPcache for the files it updates, but a file changed by hand in `/var/www/html` takes effect after restarting the container. The pool's `user`, `group` and `listen = 9000` (the port NGINX connects to) are fixed.
+
 The `WP_DB_*` and `WP_*_KEY`/`WP_*_SALT` names used by earlier versions of this image still work when the matching `WORDPRESS_*` variable is unset, but are deprecated.
 
 ## FastCGI cache
