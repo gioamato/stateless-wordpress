@@ -50,9 +50,10 @@ jobs:
         images=()
         versions='{}'
         for image in wordpress nginx; do
-          # Upstream version from the final FROM line, e.g. wordpress:7.1.3-fpm-alpine -> 7.1.3
-          version="$(grep -E '^FROM ' "$image/Dockerfile" | tail -1 | sed -E 's/^FROM +[^ :]+:([0-9]+(\.[0-9]+)*).*/\1/')"
-          [[ "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]] || { echo "Could not read the upstream version from $image/Dockerfile"; exit 1; }
+          # Version from the final FROM line's tag, up to its first "-":
+          # wordpress:php8.3-fpm-alpine@sha256:... -> php8.3, nginx:1.31.8-alpine -> 1.31.8
+          version="$(grep -E '^FROM ' "$image/Dockerfile" | tail -1 | sed -E 's/^FROM +[^ :]+:([^-@ ]+).*/\1/')"
+          [[ "$version" =~ ^(php)?[0-9]+(\.[0-9]+)*$ ]] || { echo "Could not read the version from $image/Dockerfile"; exit 1; }
           versions="$(jq -c --arg image "$image" --arg version "$version" '. + {($image): $version}' <<<"$versions")"
 
           # No base (manual run, first release) publishes everything; git diff --quiet exits 1

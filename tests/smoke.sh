@@ -88,12 +88,49 @@ fi
 echo "# Configuration from environment variables"
 expect_eq "memory_limit (php.ini from PHP_MEMORY_LIMIT)" 192M \
 	"$(compose exec -T wordpress php -r 'echo ini_get("memory_limit");')"
-expect_eq "opcache.enable (opcache.ini from PHP_OPCACHE_ENABLE)" 1 \
-	"$(compose exec -T wordpress php -r 'echo ini_get("opcache.enable");')"
 expect_eq "pm.max_children (FPM pool from PHP_FPM_MAX_CHILDREN)" 7 \
 	"$(compose exec -T wordpress php-fpm -tt 2>&1 | sed -n 's/.*pm\.max_children = //p' | tail -1)"
+# Every php.ini and opcache.ini directive reads a variable: each one gets a non-default value in a one-off
+# php process (get_cfg_var shows the value from the file, before any runtime change)
+for setting in \
+	PHP_MEMORY_LIMIT=256M:memory_limit \
+	PHP_UPLOAD_MAX_FILESIZE=64M:upload_max_filesize \
+	PHP_POST_MAX_SIZE=72M:post_max_size \
+	PHP_MAX_INPUT_VARS=2000:max_input_vars \
+	PHP_OPCACHE_ENABLE=0:opcache.enable \
+	PHP_OPCACHE_MEMORY_CONSUMPTION=96:opcache.memory_consumption \
+	PHP_OPCACHE_MAX_ACCELERATED_FILES=5000:opcache.max_accelerated_files \
+	PHP_OPCACHE_REVALIDATE_FREQUENCY=5:opcache.revalidate_freq \
+	PHP_OPCACHE_VALIDATE_TIMESTAMPS=1:opcache.validate_timestamps; do
+	variable="${setting%%=*}" value="${setting#*=}" directive="${setting##*:}"
+	value="${value%%:*}"
+	expect_eq "$directive ($variable)" "$value" \
+		"$(compose exec -T -e "$variable=$value" wordpress php -r "echo get_cfg_var('$directive');")"
+done
+# The CLI forces max_execution_time (0) and max_input_time (-1) over any ini file, so read those two the way
+# PHP parses the image's php.ini instead
+for setting in PHP_MAX_EXECUTION_TIME=90:max_execution_time PHP_MAX_INPUT_TIME=30:max_input_time; do
+	variable="${setting%%=*}" value="${setting#*=}" directive="${setting##*:}"
+	value="${value%%:*}"
+	expect_eq "$directive ($variable)" "$value" \
+		"$(compose exec -T -e "$variable=$value" wordpress \
+			php -r "echo parse_ini_file(getenv('PHP_INI_DIR') . '/conf.d/php.ini')['$directive'];")"
+done
+# Same for the FPM pool, in one php-fpm -tt run (the running pool is not touched)
+fpm_config="$(compose exec -T -e PHP_FPM_PM=static -e PHP_FPM_MAX_CHILDREN=9 -e PHP_FPM_START_SERVERS=3 \
+	-e PHP_FPM_MIN_SPARE_SERVERS=2 -e PHP_FPM_MAX_SPARE_SERVERS=4 -e PHP_FPM_MAX_REQUESTS=500 wordpress php-fpm -tt 2>&1)"
+for setting in PHP_FPM_PM=static:pm PHP_FPM_MAX_CHILDREN=9:pm.max_children PHP_FPM_START_SERVERS=3:pm.start_servers \
+	PHP_FPM_MIN_SPARE_SERVERS=2:pm.min_spare_servers PHP_FPM_MAX_SPARE_SERVERS=4:pm.max_spare_servers \
+	PHP_FPM_MAX_REQUESTS=500:pm.max_requests; do
+	variable="${setting%%=*}" value="${setting#*=}" directive="${setting##*:}"
+	value="${value%%:*}"
+	expect_eq "$directive ($variable)" "$value" \
+		"$(sed -n "s/.*[[:space:]]${directive//./\\.} = //p" <<<"$fpm_config" | tail -1)"
+done
 if compose exec -T wordpress php-fpm -t >/dev/null 2>&1; then pass "php-fpm -t"; else fail "php-fpm -t"; fi
 if compose exec -T nginx nginx -t >/dev/null 2>&1; then pass "nginx -t"; else fail "nginx -t"; fi
+expect_line "NGINX cache lifetime (FASTCGI_CACHE_VALID)" "            fastcgi_cache_valid 200 302 2h;" \
+	"$(compose exec -T nginx nginx -T 2>/dev/null)"
 
 echo "# WordPress install through NGINX"
 install_body="$(curl -s -X POST "${BASE}/wp-admin/install.php?step=2" \
@@ -108,12 +145,28 @@ install_body="$(curl -s -X POST "${BASE}/wp-admin/install.php?step=2" \
 if grep -q 'Success!' <<<"$install_body"; then pass "install.php step 2"; else fail "install.php step 2 did not report success"; fi
 if wp core is-installed >/dev/null 2>&1; then pass "wp core is-installed"; else fail "wp core is-installed"; fi
 
-echo "# Bundled plugins, theme and translations"
-plugins="$(wp plugin list --field=name)"
-for plugin in nginx-cache windows-azure-storage wp-stateless; do expect_line "plugins" "$plugin" "$plugins"; done
-expect_line "themes" twentytwentytwo "$(wp theme list --field=name)"
-if compose exec -T wordpress test -f /var/www/html/wp-content/languages/it_IT.mo; then pass "it_IT core translation"; else fail "it_IT core translation is missing"; fi
-expect_eq "DISALLOW_FILE_MODS" true "$(wp eval 'var_export(DISALLOW_FILE_MODS);')"
+echo "# wp-config.php (official template with this image's hooks)"
+# The web side reads WORDPRESS_DB_PASSWORD_FILE and the deprecated WP_DB_USER (neither default would connect):
+# the install above proves both
+expect_eq "MICROSOFT_AZURE_CONTAINER (offloading constant from an env variable)" smoke-container \
+	"$(wp eval 'echo MICROSOFT_AZURE_CONTAINER;')"
+expect_eq "MICROSOFT_AZURE_ACCOUNT_KEY (offloading constant from a *_FILE secret)" smoke-account-key \
+	"$(wp eval 'echo MICROSOFT_AZURE_ACCOUNT_KEY;')"
+# Default (stateful) mode: WordPress may install and update code; WORDPRESS_STATELESS=1 locks it to the image
+expect_eq "file mods and auto-updates (default)" "false false" \
+	"$(wp eval 'echo var_export(defined("DISALLOW_FILE_MODS") && DISALLOW_FILE_MODS, true), " ", var_export(defined("AUTOMATIC_UPDATER_DISABLED") && AUTOMATIC_UPDATER_DISABLED, true);')"
+expect_eq "file mods and auto-updates disabled (WORDPRESS_STATELESS=1)" "true true" \
+	"$(compose run --rm -T -e WORDPRESS_STATELESS=1 cli wp eval 'echo var_export(DISALLOW_FILE_MODS, true), " ", var_export(AUTOMATIC_UPDATER_DISABLED, true);')"
+
+echo "# Bundled plugins, theme and language"
+# Nginx Cache is a must-use plugin: loaded without activation, with its settings pinned to the constants
+expect_line "must-use plugins" stateless-wordpress-nginx-cache "$(wp plugin list --status=must-use --field=name)"
+expect_eq "Nginx Cache loaded" yes "$(wp eval 'echo class_exists("NginxCache") ? "yes" : "no";')"
+expect_eq "nginx_cache_path (NGINX_CACHE_PATH)" /var/www/html/cache "$(wp option get nginx_cache_path)"
+expect_eq "nginx_auto_purge (NGINX_AUTO_PURGE)" 1 "$(wp option get nginx_auto_purge)"
+expect_line "plugins" windows-azure-storage "$(wp plugin list --field=name)"
+expect_eq "active theme" twentytwentyfive "$(wp theme list --status=active --field=name)"
+expect_eq "locale" en_US "$(wp eval 'echo get_locale();')"
 if wp plugin activate --all >/dev/null; then pass "all plugins activate"; else fail "activating plugins"; fi
 
 echo "# Front end and FastCGI cache"
@@ -131,12 +184,20 @@ expect_header / X-Cache HIT
 # to HTTPS for a direct plain-HTTP request) is never served to requests that came in another way
 expect_header / X-Cache MISS -H 'X-Forwarded-Proto: smoke-test'
 expect_header /wp-login.php X-Cache BYPASS
+# Publishing content purges the cache through the Nginx Cache plugin, so the next visit is served fresh
+curl -s -o /dev/null "${BASE}/"
+expect_header / X-Cache HIT
+wp post create --post_status=publish --post_title="Cache purge check" >/dev/null
+expect_header / X-Cache MISS
 
 echo "# Access rules"
 expect_status 403 /wp-config.php
-# Include-only PHP files (WordPress hardening guide, plus the setup files in the root)
+expect_status 403 /wp-config-docker.php
+expect_status 403 /wp-config-extra.php
+expect_status 403 /wp-config-sample.php
+# Include-only PHP files (WordPress hardening guide, plus wp-settings.php in the root)
 for path in /wp-admin/includes/admin.php /wp-includes/version.php /wp-includes/js/tinymce/langs/wp-langs-en.php \
-	/wp-includes/theme-compat/header.php /wp-config-sample.php /wp-settings.php; do
+	/wp-includes/theme-compat/header.php /wp-settings.php; do
 	expect_status 403 "$path"
 done
 # Scripts in wp-includes subfolders other than those still reach PHP, like the classic editor's wp-tinymce.php

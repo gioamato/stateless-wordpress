@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "600bf5c8a85d655ae211ec868a702ddb",
+    "content-hash": "e267090104202d9fe09f739076e3585a",
     "packages": [
         {
             "name": "composer/installers",
-            "version": "v2.2.0",
+            "version": "v2.3.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/composer/installers.git",
-                "reference": "c29dc4b93137acb82734f672c37e029dfbd95b35"
+                "reference": "12fb2dfe5e16183de69e784a7b84046c43d97e8e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/composer/installers/zipball/c29dc4b93137acb82734f672c37e029dfbd95b35",
-                "reference": "c29dc4b93137acb82734f672c37e029dfbd95b35",
+                "url": "https://api.github.com/repos/composer/installers/zipball/12fb2dfe5e16183de69e784a7b84046c43d97e8e",
+                "reference": "12fb2dfe5e16183de69e784a7b84046c43d97e8e",
                 "shasum": ""
             },
             "require": {
@@ -25,12 +25,12 @@
                 "php": "^7.2 || ^8.0"
             },
             "require-dev": {
-                "composer/composer": "1.6.* || ^2.0",
-                "composer/semver": "^1 || ^3",
-                "phpstan/phpstan": "^0.12.55",
-                "phpstan/phpstan-phpunit": "^0.12.16",
-                "symfony/phpunit-bridge": "^5.3",
-                "symfony/process": "^5"
+                "composer/composer": "^1.10.27 || ^2.7",
+                "composer/semver": "^1.7.2 || ^3.4.0",
+                "phpstan/phpstan": "^1.11",
+                "phpstan/phpstan-phpunit": "^1",
+                "symfony/phpunit-bridge": "^7.1.1",
+                "symfony/process": "^5 || ^6 || ^7"
             },
             "type": "composer-plugin",
             "extra": {
@@ -87,6 +87,7 @@
                 "cockpit",
                 "codeigniter",
                 "concrete5",
+                "concreteCMS",
                 "croogo",
                 "dokuwiki",
                 "drupal",
@@ -133,7 +134,7 @@
             ],
             "support": {
                 "issues": "https://github.com/composer/installers/issues",
-                "source": "https://github.com/composer/installers/tree/v2.2.0"
+                "source": "https://github.com/composer/installers/tree/v2.3.0"
             },
             "funding": [
                 {
@@ -149,63 +150,8 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2022-08-20T06:45:11+00:00"
-        },
-        {
-            "name": "inpsyde/wp-translation-downloader",
-            "version": "2.3",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/inpsyde/wp-translation-downloader.git",
-                "reference": "2539fd343a5540871f15a9c9b0dd569a759f26b0"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/inpsyde/wp-translation-downloader/zipball/2539fd343a5540871f15a9c9b0dd569a759f26b0",
-                "reference": "2539fd343a5540871f15a9c9b0dd569a759f26b0",
-                "shasum": ""
-            },
-            "require": {
-                "composer-plugin-api": "^2.0",
-                "composer/installers": "^1.0 || ^2.0",
-                "ext-json": "*",
-                "php": ">=7.2"
-            },
-            "require-dev": {
-                "behat/behat": "^v3.10.0",
-                "brain/monkey": "^2.6.1",
-                "composer/composer": "^2.3.7",
-                "inpsyde/php-coding-standards": "^1.0.0",
-                "mikey179/vfsstream": "^v1.6.10",
-                "ondram/ci-detector": "^4.1.0",
-                "phpunit/phpunit": "^8.5.26",
-                "vimeo/psalm": "^4.23.0"
-            },
-            "type": "composer-plugin",
-            "extra": {
-                "class": "Inpsyde\\WpTranslationDownloader\\Plugin"
-            },
-            "autoload": {
-                "psr-4": {
-                    "Inpsyde\\WpTranslationDownloader\\": "src/"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Christian Leucht",
-                    "email": "c.leucht@inpsyde.com"
-                }
-            ],
-            "description": "Composer plugin to download translations from wordpress.org API.",
-            "support": {
-                "issues": "https://github.com/inpsyde/wp-translation-downloader/issues",
-                "source": "https://github.com/inpsyde/wp-translation-downloader/tree/2.3"
-            },
-            "time": "2022-06-22T07:49:21+00:00"
+            "time": "2024-06-24T20:46:46+00:00",
+            "published-time": "2024-06-24T21:01:36+00:00"
         },
         {
             "name": "wpackagist-plugin/nginx-cache",
@@ -227,15 +173,15 @@
         },
         {
             "name": "wpackagist-plugin/windows-azure-storage",
-            "version": "4.3.2",
+            "version": "4.5.2",
             "source": {
                 "type": "svn",
                 "url": "https://plugins.svn.wordpress.org/windows-azure-storage/",
-                "reference": "tags/4.3.2"
+                "reference": "tags/4.5.2"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://downloads.wordpress.org/plugin/windows-azure-storage.4.3.2.zip"
+                "url": "https://downloads.wordpress.org/plugin/windows-azure-storage.4.5.2.zip"
             },
             "require": {
                 "composer/installers": "^1.0 || ^2.0"
@@ -244,40 +190,22 @@
             "homepage": "https://wordpress.org/plugins/windows-azure-storage/"
         },
         {
-            "name": "wpackagist-plugin/wp-stateless",
-            "version": "3.1.0",
+            "name": "wpackagist-theme/twentytwentyfive",
+            "version": "1.5",
             "source": {
                 "type": "svn",
-                "url": "https://plugins.svn.wordpress.org/wp-stateless/",
-                "reference": "tags/3.1.0"
+                "url": "https://themes.svn.wordpress.org/twentytwentyfive/",
+                "reference": "1.5"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://downloads.wordpress.org/plugin/wp-stateless.3.1.0.zip"
-            },
-            "require": {
-                "composer/installers": "^1.0 || ^2.0"
-            },
-            "type": "wordpress-plugin",
-            "homepage": "https://wordpress.org/plugins/wp-stateless/"
-        },
-        {
-            "name": "wpackagist-theme/twentytwentytwo",
-            "version": "1.1",
-            "source": {
-                "type": "svn",
-                "url": "https://themes.svn.wordpress.org/twentytwentytwo/",
-                "reference": "1.1"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://downloads.wordpress.org/theme/twentytwentytwo.1.1.zip"
+                "url": "https://downloads.wordpress.org/theme/twentytwentyfive.1.5.zip"
             },
             "require": {
                 "composer/installers": "^1.0 || ^2.0"
             },
             "type": "wordpress-theme",
-            "homepage": "https://wordpress.org/themes/twentytwentytwo/"
+            "homepage": "https://wordpress.org/themes/twentytwentyfive/"
         }
     ],
     "packages-dev": [],
@@ -288,5 +216,5 @@
     "prefer-lowest": false,
     "platform": {},
     "platform-dev": {},
-    "plugin-api-version": "2.9.0"
+    "plugin-api-version": "2.11.0"
 }

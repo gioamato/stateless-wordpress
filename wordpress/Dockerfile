@@ -9,7 +9,9 @@ RUN for file in `ls ./themes/*.zip`; do unzip "${file}" -d "./wp-content/themes"
 COPY plugins ./plugins
 RUN for file in `ls ./plugins/*.zip`; do unzip "${file}" -d "./wp-content/plugins"; done
 
-FROM wordpress:7.1.3-fpm-alpine
+# Tagged by PHP version: WordPress core is copied into the volume on first boot and then updates itself
+# (or, with WORDPRESS_STATELESS, is updated by deploying a newer image). Pinned by digest; Dependabot bumps it
+FROM wordpress:php8.3-fpm-alpine@sha256:82d93a279778e5307902813c402b9118521e8104459a0e350ed719f6d6c4d1ab
 
 # PHP defaults
 ENV PHP_MEMORY_LIMIT="128M"
@@ -49,7 +51,11 @@ COPY ./php-fpm.conf /usr/local/etc/php-fpm.d/zzz-custom.conf
 RUN rm -r /usr/src/wordpress/wp-content/themes/*
 RUN rm -r /usr/src/wordpress/wp-content/plugins/*
 
+# wp-config.php is the official image's wp-config-docker.php (WORDPRESS_* variables, *_FILE secrets),
+# with hooks for this image's additions (stateless mode, offloading) and the deprecated WP_* variable names
+COPY --chown=www-data:www-data wp-config-extra.php wp-config-env-compat.php /usr/src/wordpress/
+COPY build-wp-config.sh /usr/local/bin/build-wp-config
+RUN build-wp-config
+
 # Copy WordPress files
-# TODO: Use wp-config-docker.php from the WordPress official Docker image
-COPY --chown=www-data:www-data wp-config.php /usr/src/wordpress/wp-config.php
 COPY --chown=www-data:www-data --from=build /usr/src/app/wp-content /usr/src/wordpress/wp-content
