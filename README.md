@@ -12,22 +12,33 @@ Images are published as multi-arch manifests for `linux/amd64` and `linux/arm64`
 
 ## Image Tags
 
-Each image is published under three tags on [Docker Hub](https://hub.docker.com/r/gioamato/stateless-wordpress/tags):
+The WordPress image is built for several PHP versions, each published as its own set of tags on [Docker Hub](https://hub.docker.com/r/gioamato/stateless-wordpress/tags):
+
+| PHP | Tags |
+|---|---|
+| 8.2 | `wordpress-php8.2-alpine`, `wordpress-php8.2-alpine-<commit>` |
+| 8.3 (default) | `wordpress-php8.3-alpine`, `wordpress-php8.3-alpine-<commit>`, `wordpress-alpine` |
+| 8.4 | `wordpress-php8.4-alpine`, `wordpress-php8.4-alpine-<commit>` |
+| 8.5 | `wordpress-php8.5-alpine`, `wordpress-php8.5-alpine-<commit>` |
 
 | Tag | Example | Moves when |
 |---|---|---|
-| `<image>-alpine` | `wordpress-alpine` | every release |
-| `<image>-<version>-alpine` | `wordpress-7.1.3-alpine` | every release of that upstream WordPress/NGINX version |
-| `<image>-<version>-alpine-<commit>` | `wordpress-7.1.3-alpine-dee6de0` | never: each commit is released once, so use it to roll back to a known build |
+| `<image>-alpine` | `wordpress-alpine`, `nginx-alpine` | every release; for WordPress, of the default PHP version only |
+| `<image>-<version>-alpine` | `wordpress-php8.3-alpine`, `nginx-1.31.8-alpine` | every release on that PHP (WordPress) or NGINX version |
+| `<image>-<version>-alpine-<commit>` | `wordpress-php8.3-alpine-dee6de0` | never: each commit is released once per version, so use it to roll back to a known build |
 
-A release is published only after both architectures pass the smoke test (see [Testing](#testing)), and only for the images whose directory changed.
+The WordPress image is tagged by PHP version, like the official image's `php8.3-fpm-alpine`: WordPress itself is copied in on first boot and then kept up to date by its own updater (see [Environments](#environments)). Pick the PHP version explicitly with `wordpress-php<version>-alpine`; `wordpress-alpine` follows the default PHP version (currently 8.3), so it jumps to a newer PHP when the default changes.
+
+Every PHP version is built from the same [`wordpress/Dockerfile`](wordpress/Dockerfile): it has one pinned `base-php<version>` stage per version, and the `PHP_VERSION` build argument picks one (`docker build --build-arg PHP_VERSION=php8.5 ./wordpress`). Its default is the default PHP version. Adding a version is one `FROM` line there; CI and releases pick it up from the Dockerfile.
+
+A release is published only after every PHP version passes the smoke test on both architectures (see [Testing](#testing)), and only for the images whose directory changed.
 
 ### Pinning in production
 
 A tag is only as immutable as the registry account behind it, while a digest always resolves to the same bytes. For production, pin the version tag together with its multi-arch digest:
 
 ```yaml
-image: gioamato/stateless-wordpress:wordpress-7.1.3-alpine@sha256:<digest>
+image: gioamato/stateless-wordpress:wordpress-php8.3-alpine@sha256:<digest>
 ```
 
 The digest decides what is pulled and the tag keeps the reference readable; tools like Renovate can update the digest when a new release moves the tag. Every release on the [Releases page](https://github.com/gioamato/stateless-wordpress/releases) lists the ready-to-copy pin for each image it published.
@@ -41,7 +52,7 @@ The digest decides what is pulled and the tag keeps the reference readable; tool
 git clone https://github.com/gioamato/stateless-wordpress.git
 cd stateless-wordpress
 
-# Spin it up with Docker Compose
+# Spin it up with Docker Compose (stateful: WordPress lives in the wp-data volume and updates itself)
 docker compose up -d
 
 # Open your browser and head to http://localhost:8080
@@ -56,13 +67,91 @@ kubectl apply -f https://raw.githubusercontent.com/gioamato/stateless-wordpress/
 
 # The namespace 'stateless-wordpress' is created to host the example resources:
 # - 1 Stateful MySQL replica with emptyDir volume (data lost on restart)
-# - 3 Stateless WordPress replicas (horizontal scaling)
+# - 3 Stateless WordPress replicas (horizontal scaling, WORDPRESS_STATELESS=1: offload media, see Environments)
 # - A Secret storing WordPress Enviroment Configuration
 # - A Service with type LoadBalancer to expose the app
 
 # Open your browser and head to the service External IP
 # You will find the famous WordPress 5-minute install
 ```
+
+## Environments
+
+The same image runs in two modes, chosen per deployment with `WORDPRESS_STATELESS` on the WordPress container. In both, the WordPress container copies WordPress, plugins and themes from the image into `/var/www/html` when that directory is empty (the official image's first-boot copy), and NGINX serves static files from the same volume.
+
+| | Stateful (default) | Stateless (`WORDPRESS_STATELESS=1`) |
+|---|---|---|
+| For | Docker / Docker Compose with persistent volumes | Kubernetes or any platform without persistent storage for `/var/www/html` (e.g. an `emptyDir`), several replicas |
+| `/var/www/html` | A persistent volume, shared by NGINX and PHP-FPM | Per pod (or container), recreated from the image on every start |
+| WordPress, plugins, themes | Installed from the image on first boot, then managed in wp-admin: installs, updates and automatic updates work as usual | Only from the image: plugins and themes come from `composer.json`; no installs, file edits or automatic updates (`DISALLOW_FILE_MODS`, `AUTOMATIC_UPDATER_DISABLED`). Update by deploying a newer image |
+| Media uploads | In the volume, or offloaded | **Must be offloaded to object storage**: the local copy is lost with the pod and not shared between replicas |
+
+In stateful mode, `composer.json` only decides what a new site starts with: later changes to it, or a newer image, do not touch an existing volume. Keep WordPress, plugins and themes up to date from wp-admin.
+
+### Required plugin: Nginx Cache
+
+NGINX always caches pages in this image, and [Nginx Cache](https://wordpress.org/plugins/nginx-cache/) is what purges that cache when content changes, so it is installed as a **must-use plugin**: it is active from the first boot and can't be deactivated or deleted from wp-admin. Its cache path and automatic purging are pinned to `NGINX_CACHE_PATH` (default `/var/www/html/cache`, where NGINX writes) and `NGINX_AUTO_PURGE` (default `1`); override them with `WORDPRESS_CONFIG_EXTRA`. The version comes from `composer.json` (installed into `wp-content/mu-plugins/nginx-cache/` and loaded by `mu-plugins/stateless-wordpress-nginx-cache.php`).
+
+A new site starts with English (`en_US`), the [Twenty Twenty-Five](https://wordpress.org/themes/twentytwentyfive/) theme, Nginx Cache and the Azure offloading plugin. Like all of WordPress, they are copied into `/var/www/html` only when it is empty: an existing volume keeps its own plugins, themes and languages.
+
+### Media offloading
+
+Required in stateless mode, optional in stateful mode.
+
+- **Azure Blob Storage**: [Microsoft Azure Storage for WordPress](https://wordpress.org/plugins/windows-azure-storage/) is bundled. Configure it in wp-admin or with environment variables, which become the plugin's constants: `MICROSOFT_AZURE_ACCOUNT_NAME`, `MICROSOFT_AZURE_ACCOUNT_KEY`, `MICROSOFT_AZURE_CONTAINER`, `MICROSOFT_AZURE_USE_FOR_DEFAULT_UPLOAD=1`, and any other `MICROSOFT_AZURE_*`. Append `_FILE` to read a value from a file, e.g. `MICROSOFT_AZURE_ACCOUNT_KEY_FILE=/run/secrets/azure-key`.
+- **Amazon S3, Google Cloud Storage and others**: not bundled. Add an offloading plugin for your provider to `wordpress/composer.json` (from [WordPress Packagist](https://wpackagist.org/), e.g. `wpackagist-plugin/amazon-s3-and-cloudfront`), run `composer update` in `wordpress/` and build your own image. Configure it with its settings page or its constants through `WORDPRESS_CONFIG_EXTRA`.
+
+## Configuration
+
+`wp-config.php` is built from the [official WordPress image](https://hub.docker.com/_/wordpress)'s `wp-config-docker.php`, so the official variables work unchanged:
+
+- `WORDPRESS_DB_HOST`, `WORDPRESS_DB_USER`, `WORDPRESS_DB_PASSWORD`, `WORDPRESS_DB_NAME`, `WORDPRESS_DB_CHARSET`, `WORDPRESS_DB_COLLATE`, `WORDPRESS_TABLE_PREFIX`
+- `WORDPRESS_AUTH_KEY`, `WORDPRESS_SECURE_AUTH_KEY`, `WORDPRESS_LOGGED_IN_KEY`, `WORDPRESS_NONCE_KEY`, `WORDPRESS_AUTH_SALT`, `WORDPRESS_SECURE_AUTH_SALT`, `WORDPRESS_LOGGED_IN_SALT`, `WORDPRESS_NONCE_SALT`. Set them when running more than one replica; when unset, WordPress keeps generated salts in the database.
+- `WORDPRESS_DEBUG` (any non-empty value enables `WP_DEBUG`) and `WORDPRESS_CONFIG_EXTRA` (PHP code evaluated in `wp-config.php`)
+- Append `_FILE` to any of them to read the value from a file instead, e.g. `WORDPRESS_DB_PASSWORD_FILE=/run/secrets/db-password` for Docker or Kubernetes secrets.
+
+This image adds, in `wp-config-extra.php`:
+
+- `WORDPRESS_STATELESS`: `1` (or `true`) switches on [stateless mode](#environments).
+- `MICROSOFT_AZURE_*` (and `*_FILE`) variables for [media offloading](#media-offloading).
+- `NGINX_CACHE_PATH` and `NGINX_AUTO_PURGE` for the [Nginx Cache plugin](#required-plugin-nginx-cache).
+
+On the NGINX container, `FASTCGI_CACHE_VALID` sets how long pages stay cached (see [FastCGI cache](#fastcgi-cache)).
+
+### PHP, OPcache and PHP-FPM
+
+Every setting in the image's `php.ini`, `opcache.ini` and FPM pool (`php-fpm.conf`) comes from a variable on the WordPress container:
+
+| Variable | Directive | Default |
+|---|---|---|
+| `PHP_MEMORY_LIMIT` | `memory_limit` | `128M` |
+| `PHP_UPLOAD_MAX_FILESIZE` | `upload_max_filesize` | `50M` |
+| `PHP_POST_MAX_SIZE` | `post_max_size` | `50M` |
+| `PHP_MAX_EXECUTION_TIME` | `max_execution_time` | `60` |
+| `PHP_MAX_INPUT_TIME` | `max_input_time` | `-1` |
+| `PHP_MAX_INPUT_VARS` | `max_input_vars` | `1000` |
+| `PHP_OPCACHE_ENABLE` | `opcache.enable` | `1` |
+| `PHP_OPCACHE_MEMORY_CONSUMPTION` | `opcache.memory_consumption` | `128` |
+| `PHP_OPCACHE_MAX_ACCELERATED_FILES` | `opcache.max_accelerated_files` | `10000` |
+| `PHP_OPCACHE_REVALIDATE_FREQUENCY` | `opcache.revalidate_freq` | `0` |
+| `PHP_OPCACHE_VALIDATE_TIMESTAMPS` | `opcache.validate_timestamps` | `0` |
+| `PHP_FPM_PM` | `pm` | `dynamic` |
+| `PHP_FPM_MAX_CHILDREN` | `pm.max_children` | `5` |
+| `PHP_FPM_START_SERVERS` | `pm.start_servers` | `2` |
+| `PHP_FPM_MIN_SPARE_SERVERS` | `pm.min_spare_servers` | `1` |
+| `PHP_FPM_MAX_SPARE_SERVERS` | `pm.max_spare_servers` | `2` |
+| `PHP_FPM_MAX_REQUESTS` | `pm.max_requests` | `1000` |
+
+With `PHP_OPCACHE_VALIDATE_TIMESTAMPS=0`, PHP doesn't notice changed files on its own: WordPress clears OPcache for the files it updates, but a file changed by hand in `/var/www/html` takes effect after restarting the container. The pool's `user`, `group` and `listen = 9000` (the port NGINX connects to) are fixed.
+
+The `WP_DB_*` and `WP_*_KEY`/`WP_*_SALT` names used by earlier versions of this image still work when the matching `WORDPRESS_*` variable is unset, but are deprecated.
+
+## FastCGI cache
+
+NGINX caches pages for anonymous visitors for `FASTCGI_CACHE_VALID` (default `1h`) and the Nginx Cache plugin purges the cache when content changes. Each NGINX instance keeps its own cache:
+
+- With a single NGINX (e.g. Docker Compose), a purge clears the whole cache.
+- With several (e.g. one per Kubernetes pod), a purge only clears the instance that handled the request; the others keep serving their cached pages until they expire. The Kubernetes example sets `FASTCGI_CACHE_VALID=5m` to bound that; lower it if changes must show up faster, or put a shared cache (e.g. a CDN) in front.
 
 ## Testing
 
@@ -73,9 +162,17 @@ Every pull request runs the same checks you can run locally (only Docker is requ
 tests/lint.sh
 
 # Build both images, start the stack and test it end to end:
-# env-based PHP/FPM config, WordPress install, bundled plugins/theme/translations,
+# env-based PHP/FPM config, WordPress install, bundled plugins and theme, cache purging,
 # FastCGI cache, NGINX access rules and clean PHP/NGINX logs
 tests/smoke.sh
+```
+
+`tests/smoke.sh` builds the default PHP version. CI runs it for every PHP version on amd64 and arm64; to test one version locally, build the images first:
+
+```bash
+docker build --build-arg PHP_VERSION=php8.5 -t stateless-wordpress:wordpress-test ./wordpress
+docker build -t stateless-wordpress:nginx-test ./nginx
+SMOKE_NO_BUILD=1 SMOKE_PHP_VERSION=php8.5 tests/smoke.sh
 ```
 
 The smoke test uses its own Compose project and port (`SMOKE_PORT`, default `8089`), so it can run next to the local development stack.

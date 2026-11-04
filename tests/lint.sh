@@ -20,7 +20,11 @@ done
 # wait-for-it.sh is vendored from vishnubob/wait-for-it, so it is not linted here
 run "shellcheck" \
 	docker run --rm -v "$PWD:/mnt:ro" -w /mnt koalaman/shellcheck:v0.11.0 \
-	nginx/docker-entrypoint.sh tests/smoke.sh tests/lint.sh .github/scripts/image-tag-exists.sh
+	nginx/docker-entrypoint.sh tests/smoke.sh tests/lint.sh .github/scripts/image-tag-exists.sh \
+	.github/scripts/php-versions.sh wordpress/build-wp-config.sh
+
+# Every base-<version> stage of the WordPress image is pinned and named after its PHP version (CI builds each one)
+run "php-versions" .github/scripts/php-versions.sh
 
 run "actionlint" \
 	docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.7 -no-color
